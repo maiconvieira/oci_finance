@@ -1,0 +1,527 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if objective %}Editar Objetivo: {{ objective.title }}{% else %}Lançar Objetivo Financeiro{% endif %} | OCI Finance{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            {% if objective %}
+                <i class="bi bi-pencil-square text-primary me-2"></i>Editar Objetivo Financeiro: {{ objective.title }}
+            {% else %}
+                <i class="bi bi-plus-circle-fill text-danger me-2"></i>Lançar Novo Objetivo Financeiro
+            {% endif %}
+        </h2>
+        <p class="text-muted small mb-0">
+            Selecione a <strong>Receita</strong> desejada e os campos serão exibidos conforme a personalização cadastrada para ela.
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        {% if objective and objective.frequency == 'PONTUAL' and objective.is_active %}
+            <form method="post" action="{% url 'objective_duplicate_next_period' objective.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-dark fw-semibold" title="Cria uma cópia deste objetivo único no mês/período seguinte">
+                    <i class="bi bi-calendar-plus me-1"></i> Duplicar para o Período Seguinte
+                </button>
+            </form>
+        {% endif %}
+        <a href="{% url 'category_list' %}" class="btn btn-sm btn-outline-danger fw-semibold">
+            <i class="bi bi-sliders2 me-1"></i> + Cadastrar / Personalizar Receita
+        </a>
+        <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+</div>
+
+{% if not has_any_category %}
+<div class="alert alert-warning shadow-sm d-flex align-items-center justify-content-between">
+    <div>
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong>Nenhuma Receita cadastrada ainda!</strong>
+        Antes de lançar um objetivo financeiro, cadastre e personalize pelo menos uma receita (ex: Assinatura, Jornal, Revista, Rifa, Contribuição).
+    </div>
+    <a href="{% url 'category_list' %}" class="btn btn-sm btn-danger fw-semibold">
+        Cadastrar Primeira Receita
+    </a>
+</div>
+{% endif %}
+
+<form method="post" novalidate id="objectiveForm"
+      data-categories-meta="{{ categories_meta_json }}"
+      data-depts-with-children="{{ depts_with_children_json }}"
+      data-dept-people-map="{{ dept_people_map_json }}">
+    {% csrf_token %}
+
+    {% if objective and objective.unlinked_at %}
+        <div class="alert alert-info shadow-sm d-flex align-items-center mb-3">
+            <i class="bi bi-clock-history fs-5 me-2"></i>
+            <div class="small">
+                <strong>Vínculo Histórico Mantido na Instância ({{ objective.department.code }}):</strong>
+                Este lançamento mantém seu vínculo com a instância até o momento em que foi desvinculado/inativado em
+                <strong>{{ objective.unlinked_at|date:"d/m/Y H:i" }}</strong>.
+            </div>
+        </div>
+    {% endif %}
+
+    {% if form.errors %}
+        <div class="alert alert-danger shadow-sm">
+            <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> Verifique os campos abaixo:</div>
+            <ul class="mb-0 small">
+                {% for field in form %}
+                    {% for error in field.errors %}
+                        <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Coluna Esquerda: Seleção da Receita, Ciclo e Campos Personalizados -->
+        <div class="col-12 col-xl-7">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-dark text-white py-3">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-card-heading text-danger me-2"></i>1. Receita, Periodicidade e Ciclo Mensal
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.category.id_for_label }}" class="form-label small fw-bold">
+                                Receita <span class="text-danger">*</span>
+                            </label>
+                            {{ form.category }}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.title.id_for_label }}" class="form-label small fw-bold">
+                                Descrição Complementar (Opcional)
+                            </label>
+                            {{ form.title }}
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label for="{{ form.frequency.id_for_label }}" class="form-label small fw-bold">
+                                Periodicidade <span class="text-danger">*</span>
+                            </label>
+                            {{ form.frequency }}
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label for="{{ form.reference_month_input.id_for_label }}" class="form-label small fw-bold">
+                                Ciclo Mensal (Mês/Ano) <span class="text-danger">*</span>
+                            </label>
+                            {{ form.reference_month_input }}
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label for="{{ form.due_date.id_for_label }}" class="form-label small fw-bold">
+                                Data de Vencimento <span class="text-danger">*</span>
+                            </label>
+                            {{ form.due_date }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Dinâmico: Exibe exatamente os campos habilitados na Receita selecionada -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-calculator-fill text-warning me-2"></i>2. Valores, Quantidades e Edições da Receita
+                    </h6>
+                    <span id="subscriptionBadge" class="badge bg-primary" style="display: none;">
+                        <i class="bi bi-newspaper me-1"></i>Assinatura
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <!-- Quantidade de Edições (se habilitado na Receita) -->
+                        <div class="col-12 col-md-4" id="editionsCountWrapper" style="display: none;">
+                            <label for="{{ form.editions_count.id_for_label }}" class="form-label small fw-bold">
+                                Quantidade de Edições <span class="text-danger" id="editionsCountStar" style="display: none;">*</span>
+                            </label>
+                            {{ form.editions_count }}
+                        </div>
+
+                        <!-- Edição Inicial e Final (se habilitado na Receita) -->
+                        <div class="col-12 col-md-4" id="initialEditionWrapper" style="display: none;">
+                            <label for="{{ form.initial_edition.id_for_label }}" class="form-label small fw-bold">
+                                Edição Inicial <span class="text-danger" id="initFinalStar1" style="display: none;">*</span>
+                            </label>
+                            {{ form.initial_edition }}
+                        </div>
+                        <div class="col-12 col-md-4" id="finalEditionWrapper" style="display: none;">
+                            <label for="{{ form.final_edition.id_for_label }}" class="form-label small fw-bold">
+                                Edição Final <span class="text-danger" id="initFinalStar2" style="display: none;">*</span>
+                            </label>
+                            {{ form.final_edition }}
+                        </div>
+
+                        <!-- Quantidade de Exemplares/Unidades (se habilitado na Receita) -->
+                        <div class="col-12 col-md-6" id="quantityWrapper" style="display: none;">
+                            <label for="{{ form.target_quantity.id_for_label }}" class="form-label small fw-bold">
+                                Quantidade <span class="text-danger" id="quantityStar" style="display: none;">*</span>
+                            </label>
+                            {{ form.target_quantity }}
+                        </div>
+
+                        <!-- Valor Unitário (se habilitado na Receita) -->
+                        <div class="col-12 col-md-6" id="unitPriceWrapper" style="display: none;">
+                            <label for="{{ form.unit_price.id_for_label }}" class="form-label small fw-bold">
+                                Valor Unitário (R$) <span class="text-danger" id="unitPriceStar" style="display: none;">*</span>
+                            </label>
+                            {{ form.unit_price }}
+                        </div>
+                    </div>
+
+                    <!-- Valor Total e Observações -->
+                    <div class="row g-3 pt-2 border-top">
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.target_amount.id_for_label }}" class="form-label small fw-bold">
+                                Valor Objetivo Total (R$) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text fw-bold">R$</span>
+                                {{ form.target_amount }}
+                            </div>
+                        </div>
+                        <div class="col-12" id="notesWrapper" style="display: none;">
+                            <label for="{{ form.notes.id_for_label }}" class="form-label small fw-bold">
+                                Observação <span class="text-danger" id="notesStar" style="display: none;">*</span>
+                            </label>
+                            {{ form.notes }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna Direita: Célula do Lançamento e Pessoa Vinculada -->
+        <div class="col-12 col-xl-5">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-dark text-white py-3">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-diagram-3-fill text-danger me-2"></i>3. Célula do Lançamento e Pessoa
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if objective and objective.origin_department %}
+                        <div class="alert alert-warning bg-opacity-10 border-warning py-2 px-3 small mb-3">
+                            <i class="bi bi-diagram-2-fill me-1"></i>
+                            Receita herdada da instância superior <strong>{{ objective.origin_department.code }} — {{ objective.origin_department.name }}</strong>.
+                        </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="{{ form.department.id_for_label }}" class="form-label small fw-bold">
+                            Célula do Lançamento (d5) <span class="text-danger">*</span>
+                        </label>
+                        {{ form.department }}
+                        <div class="form-text small">
+                            A célula selecionada herda automaticamente todas as receitas criadas nas instâncias superiores acima dela.
+                        </div>
+                    </div>
+
+                    <div class="mb-0" id="personSelectWrapper">
+                        <label for="{{ form.target_person.id_for_label }}" class="form-label small fw-bold">
+                            Pessoa Vinculada <span class="text-danger" id="personRequiredStar" style="display: none;">*</span>
+                        </label>
+                        {{ form.target_person }}
+                        <div class="form-text small" id="personScopeHint">
+                            Exibe apenas as pessoas vinculadas à célula selecionada acima.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        {{ form.is_active }}
+                        <label class="form-check-label fw-semibold small" for="{{ form.is_active.id_for_label }}">
+                            Objetivo Ativo (Visível nas listagens e relatórios)
+                        </label>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-danger fw-semibold py-2">
+                            <i class="bi bi-check2-circle me-1"></i>
+                            {% if objective %}Salvar Alterações do Objetivo{% else %}Confirmar Lançamento do Objetivo{% endif %}
+                        </button>
+                        <a href="{% url 'objective_list' %}" class="btn btn-outline-secondary btn-sm">
+                            Cancelar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const formEl = document.getElementById('objectiveForm');
+    if (!formEl) return;
+
+    const categoriesMeta = JSON.parse(formEl.getAttribute('data-categories-meta') || '{}');
+    const deptsWithChildren = JSON.parse(formEl.getAttribute('data-depts-with-children') || '[]');
+    const deptPeopleMap = JSON.parse(formEl.getAttribute('data-dept-people-map') || '{}');
+
+    const categorySelect = document.getElementById('{{ form.category.id_for_label }}');
+    const freqSelect = document.getElementById('{{ form.frequency.id_for_label }}');
+    const departmentSelect = document.getElementById('{{ form.department.id_for_label }}');
+    const personSelect = document.getElementById('{{ form.target_person.id_for_label }}');
+    const personScopeHint = document.getElementById('personScopeHint');
+
+    const editionsCountWrapper = document.getElementById('editionsCountWrapper');
+    const editionsCountStar = document.getElementById('editionsCountStar');
+    const editionsCountInput = document.getElementById('{{ form.editions_count.id_for_label }}');
+
+    const initialEditionWrapper = document.getElementById('initialEditionWrapper');
+    const finalEditionWrapper = document.getElementById('finalEditionWrapper');
+    const initFinalStar1 = document.getElementById('initFinalStar1');
+    const initFinalStar2 = document.getElementById('initFinalStar2');
+    const initialEditionInput = document.getElementById('{{ form.initial_edition.id_for_label }}');
+    const finalEditionInput = document.getElementById('{{ form.final_edition.id_for_label }}');
+
+    const quantityWrapper = document.getElementById('quantityWrapper');
+    const quantityStar = document.getElementById('quantityStar');
+    const qtyInput = document.getElementById('{{ form.target_quantity.id_for_label }}');
+
+    const unitPriceWrapper = document.getElementById('unitPriceWrapper');
+    const unitPriceStar = document.getElementById('unitPriceStar');
+    const unitInput = document.getElementById('{{ form.unit_price.id_for_label }}');
+
+    const totalInput = document.getElementById('{{ form.target_amount.id_for_label }}');
+    const notesWrapper = document.getElementById('notesWrapper');
+    const notesStar = document.getElementById('notesStar');
+    const personRequiredStar = document.getElementById('personRequiredStar');
+    const subscriptionBadge = document.getElementById('subscriptionBadge');
+
+    const propagateBox = document.getElementById('propagateHierarchyBox');
+    const propagateSwitch = document.getElementById('{{ form.propagate_to_children.id_for_label }}');
+    const replicationInfo = document.getElementById('replicationLevelInfoText');
+
+    function recalculateTotal() {
+        const q = parseFloat(qtyInput && quantityWrapper.style.display !== 'none' ? qtyInput.value : '');
+        const u = parseFloat(unitInput && unitPriceWrapper.style.display !== 'none' ? unitInput.value : '');
+        if (!isNaN(q) && q > 0 && !isNaN(u) && u >= 0 && totalInput) {
+            totalInput.value = (q * u).toFixed(2);
+        } else if (isNaN(q) && !isNaN(u) && u > 0 && totalInput && !totalInput.value) {
+            totalInput.value = u.toFixed(2);
+        }
+    }
+
+    function applyRevenueCustomization(isChangeEvent) {
+        const catId = categorySelect ? String(categorySelect.value) : '';
+        const meta = categoriesMeta[catId] || null;
+
+        if (!meta) {
+            editionsCountWrapper.style.display = 'none';
+            initialEditionWrapper.style.display = 'none';
+            finalEditionWrapper.style.display = 'none';
+            quantityWrapper.style.display = 'none';
+            unitPriceWrapper.style.display = 'none';
+            if (notesWrapper) notesWrapper.style.display = 'none';
+            subscriptionBadge.style.display = 'none';
+            if (personRequiredStar) personRequiredStar.style.display = 'none';
+            if (propagateBox) propagateBox.style.display = 'none';
+            return;
+        }
+
+        // Periodicidade padrão da Receita
+        if (isChangeEvent && freqSelect && meta.default_frequency) {
+            freqSelect.value = meta.default_frequency;
+        }
+
+        // Badge Assinatura
+        subscriptionBadge.style.display = meta.is_subscription ? 'inline-block' : 'none';
+
+        // Quantidade de Edições
+        editionsCountWrapper.style.display = meta.use_editions_count ? 'block' : 'none';
+        editionsCountStar.style.display = meta.editions_count_required ? 'inline' : 'none';
+        if (isChangeEvent && meta.use_editions_count && meta.default_editions_count && editionsCountInput) {
+            editionsCountInput.value = meta.default_editions_count;
+        }
+
+        // Edição Inicial e Final
+        initialEditionWrapper.style.display = meta.use_initial_final_edition ? 'block' : 'none';
+        finalEditionWrapper.style.display = meta.use_initial_final_edition ? 'block' : 'none';
+        initFinalStar1.style.display = meta.initial_final_edition_required ? 'inline' : 'none';
+        initFinalStar2.style.display = meta.initial_final_edition_required ? 'inline' : 'none';
+        if (isChangeEvent && meta.use_initial_final_edition) {
+            if (meta.default_initial_edition && initialEditionInput) initialEditionInput.value = meta.default_initial_edition;
+            if (meta.default_final_edition && finalEditionInput) finalEditionInput.value = meta.default_final_edition;
+        }
+
+        // Quantidade
+        quantityWrapper.style.display = meta.use_quantity ? 'block' : 'none';
+        quantityStar.style.display = meta.quantity_required ? 'inline' : 'none';
+        if (isChangeEvent && meta.use_quantity && meta.default_quantity && qtyInput) {
+            qtyInput.value = meta.default_quantity;
+        }
+
+        // Valor Unitário
+        unitPriceWrapper.style.display = meta.use_unit_price ? 'block' : 'none';
+        unitPriceStar.style.display = meta.unit_price_required ? 'inline' : 'none';
+        if (isChangeEvent && meta.use_unit_price && meta.default_unit_price && unitInput) {
+            unitInput.value = meta.default_unit_price;
+        }
+
+        // Campo Observação
+        if (notesWrapper) {
+            notesWrapper.style.display = meta.use_notes ? 'block' : 'none';
+        }
+        if (notesStar) {
+            notesStar.style.display = meta.notes_required ? 'inline' : 'none';
+        }
+
+        // Obrigatoriedade de Pessoa
+        if (personRequiredStar) {
+            personRequiredStar.style.display = meta.person_required ? 'inline' : 'none';
+        }
+
+        if (isChangeEvent) {
+            recalculateTotal();
+        }
+    }
+
+    // Cálculo automático da Edição Final quando informa Edição Inicial + Quantidade de Edições
+    function updateFinalEditionFromCount() {
+        const initVal = parseInt(initialEditionInput ? initialEditionInput.value : '', 10);
+        const countVal = parseInt(editionsCountInput ? editionsCountInput.value : '', 10);
+        if (!isNaN(initVal) && initVal > 0 && !isNaN(countVal) && countVal > 0 && finalEditionInput) {
+            finalEditionInput.value = initVal + countVal - 1;
+        }
+    }
+
+    // Filtra as Receitas disponíveis de acordo com as permissões herdadas pela Célula (d5) selecionada
+    const allCategoryOptions = categorySelect
+        ? Array.from(categorySelect.options).map(function (opt) {
+              return { value: String(opt.value), text: opt.textContent };
+          })
+        : [];
+
+    function filterCategoriesByDepartment() {
+        if (!categorySelect || !departmentSelect) return;
+        const selectedDeptId = parseInt(departmentSelect.value || '', 10);
+        const previousCatId = String(categorySelect.value || '');
+
+        categorySelect.innerHTML = '';
+        let restoredCat = false;
+
+        allCategoryOptions.forEach(function (optData) {
+            if (!optData.value) {
+                const emptyOpt = document.createElement('option');
+                emptyOpt.value = '';
+                emptyOpt.textContent = optData.text;
+                categorySelect.appendChild(emptyOpt);
+                return;
+            }
+            const meta = categoriesMeta[optData.value];
+            if (!meta) return;
+
+            const isAllowedForCell =
+                isNaN(selectedDeptId) ||
+                !Array.isArray(meta.allowed_dept_ids) ||
+                meta.allowed_dept_ids.indexOf(selectedDeptId) !== -1;
+
+            if (isAllowedForCell) {
+                const opt = document.createElement('option');
+                opt.value = optData.value;
+                opt.textContent = optData.text;
+                if (optData.value === previousCatId) {
+                    opt.selected = true;
+                    restoredCat = true;
+                }
+                categorySelect.appendChild(opt);
+            }
+        });
+
+        if (!restoredCat) {
+            categorySelect.value = '';
+            applyRevenueCustomization(false);
+        }
+    }
+
+    // Filtra as opções de Pessoa Vinculada para mostrar apenas as pessoas relacionadas à Célula selecionada
+    function filterPeopleByDepartment() {
+        if (!departmentSelect || !personSelect) return;
+        const selectedDeptId = String(departmentSelect.value || '');
+        const previousPersonId = String(personSelect.value || '');
+
+        personSelect.innerHTML = '';
+
+        if (!selectedDeptId) {
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = '';
+            emptyOpt.textContent = '— Selecione primeiro a Célula do Lançamento —';
+            personSelect.appendChild(emptyOpt);
+            if (personScopeHint) {
+                personScopeHint.textContent = 'Selecione uma célula acima para listar as pessoas vinculadas a ela.';
+            }
+            return;
+        }
+
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '— Meta Geral da Célula (Sem pessoa específica) —';
+        personSelect.appendChild(defaultOpt);
+
+        const peopleForDept = deptPeopleMap[selectedDeptId] || [];
+        let restoredSelection = false;
+
+        peopleForDept.forEach(function (personObj) {
+            const opt = document.createElement('option');
+            opt.value = String(personObj.id);
+            opt.textContent = personObj.name;
+            if (String(personObj.id) === previousPersonId) {
+                opt.selected = true;
+                restoredSelection = true;
+            }
+            personSelect.appendChild(opt);
+        });
+
+        if (!restoredSelection) {
+            personSelect.value = '';
+        }
+
+        if (personScopeHint) {
+            personScopeHint.textContent = peopleForDept.length > 0
+                ? 'Exibindo ' + peopleForDept.length + ' pessoa(s) vinculada(s) a esta célula.'
+                : 'Nenhuma pessoa vinculada diretamente a esta célula.';
+        }
+    }
+
+    if (departmentSelect) {
+        departmentSelect.addEventListener('change', function () {
+            filterCategoriesByDepartment();
+            filterPeopleByDepartment();
+        });
+        filterCategoriesByDepartment();
+        filterPeopleByDepartment();
+    }
+
+    if (categorySelect) {
+        categorySelect.addEventListener('change', function () {
+            applyRevenueCustomization(true);
+        });
+        applyRevenueCustomization(false);
+    }
+
+    if (qtyInput) qtyInput.addEventListener('input', recalculateTotal);
+    if (unitInput) unitInput.addEventListener('input', recalculateTotal);
+    if (initialEditionInput) initialEditionInput.addEventListener('input', updateFinalEditionFromCount);
+    if (editionsCountInput) editionsCountInput.addEventListener('input', updateFinalEditionFromCount);
+});
+</script>
+{% endblock %}

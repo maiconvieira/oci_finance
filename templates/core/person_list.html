@@ -1,0 +1,255 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastro de Pessoas | OCI Finance{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho da Página -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            <i class="bi bi-people-fill text-danger me-2"></i>Cadastro de Pessoas & Usuários
+        </h2>
+    </div>
+    <div class="d-flex gap-2 mt-2 mt-sm-0">
+        {% if show_inactive %}
+            <a href="{% url 'person_list' %}" class="btn btn-sm btn-outline-dark">
+                <i class="bi bi-eye me-1"></i> Ver Cadastros Ativos
+            </a>
+        {% else %}
+            <a href="{% url 'person_list' %}?ocultos=1" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-eye-slash me-1"></i> Ver Ocultos
+            </a>
+        {% endif %}
+
+        {% if can_add_person %}
+            <a href="{% url 'person_create' %}" class="btn btn-sm btn-danger fw-semibold">
+                <i class="bi bi-person-plus-fill me-1"></i> Nova Pessoa
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Cards de Filtro Rápido por Grupo (01 a 06) -->
+<div class="row g-2 mb-4">
+    <div class="col-6 col-md-4 col-xl-2">
+        <a href="{% url 'person_list' %}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if not group_filter and not show_inactive %}border-start border-4 border-dark{% endif %}">
+                <div class="card-body py-2 px-3">
+                    <div class="text-muted small fw-semibold text-truncate" style="font-size: 0.72rem;">TODOS OS ATIVOS</div>
+                    <div class="h5 fw-bold text-dark mb-0">{{ total_active_count }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% for item in group_cards %}
+    <div class="col-6 col-md-4 col-xl-2">
+        <a href="{% url 'person_list' %}?group={{ item.group.id }}" class="text-decoration-none">
+            <div class="card border-0 shadow-sm h-100 {% if item.is_active_filter %}border-start border-4 border-danger{% endif %}">
+                <div class="card-body py-2 px-3">
+                    <div class="text-secondary small fw-semibold text-truncate" style="font-size: 0.72rem;" title="{{ item.group.name }}">
+                        {{ item.group.name }}
+                    </div>
+                    <div class="h5 fw-bold text-dark mb-0">{{ item.count }}</div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Barra de Busca e Filtros -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-3">
+        <form method="get" action="{% url 'person_list' %}" class="row g-2 align-items-end">
+            {% if show_inactive %}
+                <input type="hidden" name="ocultos" value="1">
+            {% endif %}
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-bold text-muted mb-1">Buscar Pessoa ou Usuário</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome, apelido, telefone, e-mail ou login...">
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold text-muted mb-1">Grupo / Perfil</label>
+                <select name="group" class="form-select form-select-sm">
+                    <option value="">Todos os Grupos</option>
+                    {% for g in all_groups %}
+                        <option value="{{ g.id }}" {% if group_filter == g.id %}selected{% endif %}>{{ g.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small fw-bold text-muted mb-1">Instância / Célula</label>
+                <select name="department" class="form-select form-select-sm">
+                    <option value="">Todas no meu escopo</option>
+                    {% for item in cascade_depts %}
+                        <option value="{{ item.department.id }}" {% if dept_filter == item.department.id %}selected{% endif %}>
+                            {{ item.level_tag|upper }} • {{ item.path_display }} ({{ item.department.name }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-sm btn-dark w-100">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
+                </button>
+                <a href="{% url 'person_list' %}" class="btn btn-sm btn-outline-secondary" title="Limpar filtros">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabela Principal de Pessoas -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="m-0 fw-bold">
+            {% if show_inactive %}
+                <i class="bi bi-eye-slash text-secondary me-2"></i>Cadastros Ocultos ({{ people|length }})
+            {% else %}
+                <i class="bi bi-person-lines-fill text-danger me-2"></i>Pessoas Listadas ({{ people|length }})
+            {% endif %}
+        </h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light small">
+                <tr>
+                    <th>Pessoa / Contato</th>
+                    <th>Grupos / Perfis</th>
+                    <th>Instâncias e Nível de Atuação</th>
+                    <th>Militante Responsável</th>
+                    <th>Acesso ao Sistema (Login)</th>
+                    <th class="text-end" style="width: 150px;">Ações</th>
+                </tr>
+            </thead>
+            <tbody class="small">
+                {% for p in people %}
+                <tr class="{% if not p.is_active %}table-secondary text-muted{% endif %}">
+                    <td>
+                        <div class="fw-bold text-dark">
+                            {{ p.name }}
+                            {% if p.nickname %}
+                                <span class="text-muted fw-normal">({{ p.nickname }})</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted" style="font-size: 0.78rem;">
+                            {% if p.phone %}<i class="bi bi-telephone me-1"></i>{{ p.phone }}{% endif %}
+                            {% if p.email %}<span class="ms-2"><i class="bi bi-envelope me-1"></i>{{ p.email }}</span>{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for g in p.groups.all %}
+                                {% if '00' in g.name %}
+                                    <span class="badge bg-dark">{{ g.name }}</span>
+                                {% elif '01' in g.name %}
+                                    <span class="badge bg-info text-dark">{{ g.name }}</span>
+                                {% elif '02' in g.name %}
+                                    <span class="badge bg-success">{{ g.name }}</span>
+                                {% elif '03' in g.name %}
+                                    <span class="badge bg-danger">{{ g.name }}</span>
+                                {% elif '04' in g.name %}
+                                    <span class="badge bg-primary">{{ g.name }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ g.name }}</span>
+                                {% endif %}
+                            {% empty %}
+                                <span class="text-danger small">Sem grupo</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for link in p.department_links.all %}
+                                {% if link.role == 'MANAGE' %}
+                                    <span class="badge bg-dark text-white" title="Acesso Total em {{ link.department.name }} (e subordinadas)">
+                                        <i class="bi bi-shield-check text-success me-1"></i>{{ link.department.code }} (Total)
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark border" title="Apenas Visualização / Vínculo em {{ link.department.name }}">
+                                        <i class="bi bi-eye text-secondary me-1"></i>{{ link.department.code }}
+                                    </span>
+                                {% endif %}
+                            {% empty %}
+                                <span class="text-muted">—</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if p.responsible_militant %}
+                            <span class="fw-semibold text-dark">
+                                <i class="bi bi-person-badge text-danger me-1"></i>{{ p.responsible_militant.name }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.user and p.user.is_active %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                                <i class="bi bi-person-check-fill me-1"></i>@{{ p.user.username }}
+                            </span>
+                        {% elif p.user and not p.user.is_active %}
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary border">
+                                <i class="bi bi-person-slash me-1"></i>Login Desativado (@{{ p.user.username }})
+                            </span>
+                        {% else %}
+                            <span class="text-muted">Sem login</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if p.can_user_edit or p.can_user_toggle_active %}
+                            <div class="d-inline-flex align-items-center justify-content-end gap-1">
+                                {% if p.can_user_edit %}
+                                    <a href="{% url 'person_update' p.id %}"
+                                       class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                       style="width: 32px; height: 32px;"
+                                       title="Editar cadastro e permissões">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </a>
+                                {% endif %}
+                                {% if p.can_user_toggle_active %}
+                                    <form method="post" action="{% url 'person_toggle_active' p.id %}" class="d-inline m-0">
+                                        {% csrf_token %}
+                                        {% if p.is_active %}
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+                                                    style="width: 32px; height: 32px;"
+                                                    title="Ocultar cadastro (não exclui histórico)">
+                                                <i class="bi bi-eye-slash"></i>
+                                            </button>
+                                        {% else %}
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-outline-success d-inline-flex align-items-center justify-content-center"
+                                                    style="width: 32px; height: 32px;"
+                                                    title="Reativar cadastro">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        {% endif %}
+                                    </form>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <span class="badge bg-light text-muted border" title="Você tem permissão apenas de visualização nesta instância">
+                                <i class="bi bi-lock"></i> Somente Leitura
+                            </span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-5">
+                        <i class="bi bi-people fs-2 d-block mb-2 text-secondary"></i>
+                        Nenhuma pessoa encontrada com os filtros selecionados.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

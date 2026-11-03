@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+
+{% block title %}Administração do Sistema & Grupos | OCI Finance{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho da Página -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            <i class="bi bi-gear-fill text-danger me-2"></i>Administração do Sistema & Grupos de Acesso
+        </h2>
+        <p class="text-muted small mb-0">
+            Configure os <strong>Grupos e Perfis</strong> do sistema e defina as permissões de visualização, criação, edição e ocultação.
+        </p>
+    </div>
+    <div class="d-flex gap-2 mt-2 mt-sm-0">
+        {% if editing_group %}
+            <a href="{% url 'system_admin' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-plus-lg me-1"></i> Criar Novo Grupo
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Atalhos Rápidos dos Módulos do Sistema -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="fw-bold mb-1"><i class="bi bi-diagram-3-fill text-danger me-2"></i>Instâncias (Estrutura)</h6>
+                    <p class="text-muted small mb-0">Gerenciar árvore d1 a d5 em cascata</p>
+                </div>
+                <a href="{% url 'department_list' %}" class="btn btn-sm btn-outline-dark">Abrir</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="fw-bold mb-1"><i class="bi bi-people-fill text-primary me-2"></i>Pessoas & Usuários</h6>
+                    <p class="text-muted small mb-0">Gerenciar cadastros, grupos e logins</p>
+                </div>
+                <a href="{% url 'person_list' %}" class="btn btn-sm btn-outline-primary">Abrir</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body d-flex align-items-center justify-content-between">
+                <div>
+                    <h6 class="fw-bold mb-1"><i class="bi bi-cash-coin text-success me-2"></i>Módulo Financeiro</h6>
+                    <p class="text-muted small mb-0">Objetivos, categorias e liquidações</p>
+                </div>
+                <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-success">Abrir</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Coluna Esquerda: Lista dos Grupos / Perfis Cadastrados -->
+    <div class="col-12 col-xl-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-shield-lock-fill text-danger me-2"></i>Grupos / Perfis do Sistema ({{ groups_data|length }})
+                </h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small">
+                        <tr>
+                            <th>Grupo / Perfil</th>
+                            <th class="text-center">Pessoas</th>
+                            <th class="text-center">Usuários c/ Login</th>
+                            <th>Direitos e Permissões</th>
+                            <th class="text-end" style="width: 150px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="small">
+                        {% for item in groups_data %}
+                        <tr class="{% if editing_group and editing_group.id == item.group.id %}table-warning{% endif %}">
+                            <td>
+                                <div class="fw-bold text-dark">{{ item.group.name }}</div>
+                                {% if item.is_full_access %}
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 mt-1">
+                                        <i class="bi bi-award-fill me-1"></i>Usuário Administrador (Dispensa Instância/Militante)
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <a href="{% url 'person_list' %}?group={{ item.group.id }}" class="badge rounded-pill bg-primary bg-opacity-10 text-primary text-decoration-none">
+                                    {{ item.people_count }} pessoa{{ item.people_count|pluralize:"s" }}
+                                </a>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge rounded-pill bg-dark bg-opacity-10 text-dark">
+                                    {{ item.users_count }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if item.is_full_access %}
+                                    <span class="text-success fw-semibold">Acesso de Usuário Administrador</span>
+                                {% elif item.perm_labels %}
+                                    <div class="d-flex flex-wrap gap-1">
+                                        {% for lbl in item.perm_labels %}
+                                            <span class="badge bg-light text-dark border">{{ lbl }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted fst-italic">Perfil Analítico / Sem acesso a telas internas</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'system_admin' %}?edit={{ item.group.id }}#groupFormCard"
+                                       class="btn btn-outline-primary"
+                                       title="Configurar permissões do grupo">
+                                        <i class="bi bi-sliders"></i>
+                                    </a>
+                                    {% if can_delete_groups %}
+                                        <button type="button"
+                                                class="btn btn-outline-danger"
+                                                title="Excluir grupo"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteGroupModal{{ item.group.id }}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+
+                                {% if can_delete_groups %}
+                                <!-- Modal de Confirmação de Exclusão de Grupo -->
+                                <div class="modal fade text-start" id="deleteGroupModal{{ item.group.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <div class="modal-header bg-dark text-white">
+                                                <h6 class="modal-title fw-bold">
+                                                    <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Excluir Grupo
+                                                </h6>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p class="mb-2">
+                                                    Deseja realmente excluir o grupo <strong>{{ item.group.name }}</strong>?
+                                                </p>
+                                                <p class="text-muted small mb-0">
+                                                    Atualmente há <strong>{{ item.people_count }} pessoa(s)</strong> vinculada(s) a este grupo.
+                                                </p>
+                                            </div>
+                                            <div class="modal-footer bg-light">
+                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <form method="post" action="{% url 'group_delete' item.group.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-sm btn-danger">
+                                                        <i class="bi bi-trash me-1"></i> Confirmar Exclusão
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna Direita: Editor de Grupo e Permissões -->
+    <div class="col-12 col-xl-5" id="groupFormCard">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header {% if editing_group %}bg-primary text-white{% else %}bg-dark text-white{% endif %} py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 fw-bold">
+                    {% if editing_group %}
+                        <i class="bi bi-sliders me-2"></i>Configurar Permissões: {{ editing_group.name }}
+                    {% else %}
+                        <i class="bi bi-plus-circle-fill text-danger me-2"></i>Novo Grupo / Perfil
+                    {% endif %}
+                </h6>
+                <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 small" id="toggleAllPermsBtn">
+                    Marcar Todas Permissões
+                </button>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'system_admin' %}">
+                    {% csrf_token %}
+                    {% if editing_group %}
+                        <input type="hidden" name="group_id" value="{{ editing_group.id }}">
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label small fw-bold">
+                            Nome do Grupo / Perfil <span class="text-danger">*</span>
+                        </label>
+                        {{ form.name }}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold d-block mb-2">
+                            Permissões de Acesso às Telas e Ações:
+                        </label>
+                        <div class="accordion" id="permsAccordion">
+                            {% for sec in module_sections %}
+                            <div class="accordion-item border mb-2 rounded overflow-hidden">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button py-2 px-3 small fw-bold bg-light text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#secCollapse{{ forloop.counter }}">
+                                        <i class="bi {{ sec.icon }} me-2"></i> {{ sec.title }}
+                                    </button>
+                                </h2>
+                                <div id="secCollapse{{ forloop.counter }}" class="accordion-collapse collapse show">
+                                    <div class="accordion-body py-2 px-3">
+                                        {% for perm in sec.permissions %}
+                                        <div class="form-check my-1">
+                                            <input class="form-check-input perm-checkbox"
+                                                   type="checkbox"
+                                                   name="permissions"
+                                                   value="{{ perm.id }}"
+                                                   id="perm_{{ perm.id }}"
+                                                   {% if perm.checked %}checked{% endif %}>
+                                            <label class="form-check-label small" for="perm_{{ perm.id }}">
+                                                {{ perm.label }}
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-3">
+                        <button type="submit" class="btn {% if editing_group %}btn-primary{% else %}btn-danger{% endif %} fw-semibold">
+                            <i class="bi bi-check2-circle me-1"></i>
+                            {% if editing_group %}Salvar Permissões do Grupo{% else %}Criar Grupo{% endif %}
+                        </button>
+                        {% if editing_group %}
+                            <a href="{% url 'system_admin' %}" class="btn btn-outline-secondary btn-sm">
+                                Cancelar
+                            </a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light small text-muted">
+                <i class="bi bi-info-circle-fill text-success me-1"></i>
+                <strong>Regra Automática:</strong> Qualquer grupo que possua todas as permissões marcadas concede perfil de <strong>Usuário Administrador</strong>, dispensando o usuário de vínculo obrigatório com instância ou militante responsável.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const toggleBtn = document.getElementById('toggleAllPermsBtn');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            const boxes = document.querySelectorAll('.perm-checkbox');
+            const allChecked = Array.from(boxes).every(b => b.checked);
+            boxes.forEach(b => { b.checked = !allChecked; });
+            this.textContent = allChecked ? 'Marcar Todas Permissões' : 'Desmarcar Todas';
+        });
+    }
+});
+</script>
+{% endblock %}

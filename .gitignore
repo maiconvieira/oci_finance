@@ -1,3 +1,21 @@
+<<<<<<< HEAD
+# ===============================
+# 1. Segurança e Variáveis de Ambiente
+# ===============================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===============================
+# 2. Python e Compilação
+# ===============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+=======
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -7,6 +25,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+>>>>>>> origin/main
 .Python
 build/
 develop-eggs/
@@ -20,6 +39,68 @@ parts/
 sdist/
 var/
 wheels/
+<<<<<<< HEAD
+*.egg-info/
+.installed.cfg
+*.egg
+*.pyc
+
+# ===============================
+# 3. Ambientes Virtuais (Virtual Environments)
+# ===============================
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ===============================
+# 4. Django & Banco de Dados Local
+# ===============================
+# Coleta de estáticos de produção
+staticfiles/
+
+# Uploads locais de mídia (devem ser persistidos em S3/R2 em produção)
+media/
+
+# Bancos de dados locais e dumps temporários (SQLite / PostgreSQL)
+*.sqlite3
+*.db
+*.sql
+*.dump
+
+# ===============================
+# 5. VS Code e Editores
+# ===============================
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.sublime-project
+*.sublime-workspace
+.idea/
+
+# ===============================
+# 6. Sistema Operacional (Windows / Linux / macOS)
+# ===============================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ===============================
+# 7. Testes e Cobertura (Opcional, mas recomendado)
+# ===============================
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Credenciais e Tokens Google API
+gdrive_credentials.json
+gdrive_token.json
+=======
 share/python-wheels/
 *.egg-info/
 .installed.cfg
@@ -218,3 +299,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+>>>>>>> origin/main

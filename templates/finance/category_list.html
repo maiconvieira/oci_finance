@@ -1,0 +1,419 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastro e Personalização de Receitas | OCI Finance{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            <i class="bi bi-sliders2 text-danger me-2"></i>Cadastro e Personalização de Receitas
+        </h2>
+        <p class="text-muted small mb-0">
+            Configure cada receita sob medida: nome, sigla, periodicidade, valor unitário, quantidade, assinatura, edições, campos obrigatórios e nível de replicação.
+        </p>
+    </div>
+    <div class="d-flex gap-2 mt-2 mt-sm-0">
+        {% if editing_category %}
+            <a href="{% url 'category_list' %}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-plus-lg me-1"></i> Nova Receita Limpa
+            </a>
+        {% endif %}
+        <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-dark">
+            <i class="bi bi-bullseye me-1"></i> Ir para Objetivos Financeiros
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Coluna Esquerda: Formulário de Personalização Completa da Receita -->
+    <div class="col-12 col-xl-6" id="revenueFormCard">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header {% if editing_category %}bg-primary text-white{% else %}bg-dark text-white{% endif %} py-3">
+                <h6 class="m-0 fw-bold">
+                    {% if editing_category %}
+                        <i class="bi bi-pencil-square me-2"></i>Editar Receita: {{ editing_category.code }} — {{ editing_category.name }}
+                    {% else %}
+                        <i class="bi bi-plus-circle-fill text-danger me-2"></i>Cadastrar Novo Tipo / Nome de Receita
+                    {% endif %}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'category_list' %}" novalidate
+                      id="categoryConfigForm"
+                      data-depts-by-level="{{ depts_by_level_json }}"
+                      data-selected-depts="{{ selected_target_dept_ids_json }}">
+                    {% csrf_token %}
+                    {% if editing_category %}
+                        <input type="hidden" name="category_id" value="{{ editing_category.id }}">
+                    {% endif %}
+
+                    <!-- 1. Identificação e Periodicidade -->
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="fw-bold text-dark small mb-2 text-uppercase">
+                            <i class="bi bi-tag-fill text-danger me-1"></i> 1. Identificação & Periodicidade
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-5">
+                                <label for="{{ form.name.id_for_label }}" class="form-label small fw-bold">
+                                    Nome da Receita <span class="text-danger">*</span>
+                                </label>
+                                {{ form.name }}
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="{{ form.code.id_for_label }}" class="form-label small fw-bold">
+                                    Sigla <span class="text-danger">*</span>
+                                </label>
+                                {{ form.code }}
+                            </div>
+                            <div class="col-6 col-md-4">
+                                <label for="{{ form.default_frequency.id_for_label }}" class="form-label small fw-bold">
+                                    Periodicidade <span class="text-danger">*</span>
+                                </label>
+                                {{ form.default_frequency }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Valor Unitário e Quantidade -->
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="fw-bold text-dark small mb-2 text-uppercase">
+                            <i class="bi bi-currency-dollar text-success me-1"></i> 2. Valor Unitário & Quantidade
+                        </div>
+
+                        <!-- Linha Valor Unitário -->
+                        <div class="row g-2 align-items-center pb-2 mb-2 border-bottom">
+                            <div class="col-12 col-sm-5">
+                                <div class="form-check form-switch">
+                                    {{ form.use_unit_price }}
+                                    <label class="form-check-label small fw-bold" for="{{ form.use_unit_price.id_for_label }}">
+                                        Usar Valor Unitário
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-6 col-sm-4">
+                                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Valor Unitário Padrão (R$)</label>
+                                {{ form.default_unit_price }}
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <div class="form-check mt-3">
+                                    {{ form.unit_price_required }}
+                                    <label class="form-check-label small text-danger fw-semibold" for="{{ form.unit_price_required.id_for_label }}">
+                                        Obrigatório?
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Linha Quantidade -->
+                        <div class="row g-2 align-items-center">
+                            <div class="col-12 col-sm-5">
+                                <div class="form-check form-switch">
+                                    {{ form.use_quantity }}
+                                    <label class="form-check-label small fw-bold" for="{{ form.use_quantity.id_for_label }}">
+                                        Usar Quantidade
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-6 col-sm-4">
+                                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Quantidade Padrão</label>
+                                {{ form.default_quantity }}
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <div class="form-check mt-3">
+                                    {{ form.quantity_required }}
+                                    <label class="form-check-label small text-danger fw-semibold" for="{{ form.quantity_required.id_for_label }}">
+                                        Obrigatório?
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Assinatura, Quantidade de Edições e Edição Inicial / Final -->
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                            <div class="fw-bold text-dark small text-uppercase">
+                                <i class="bi bi-newspaper text-primary me-1"></i> 3. Assinatura & Controle de Edições
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                                {{ form.is_subscription }}
+                                <label class="form-check-label small fw-bold text-primary" for="{{ form.is_subscription.id_for_label }}">
+                                    É uma Assinatura?
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Quantidade de Edições -->
+                        <div class="row g-2 align-items-center pb-2 mb-2 border-bottom">
+                            <div class="col-12 col-sm-5">
+                                <div class="form-check form-switch">
+                                    {{ form.use_editions_count }}
+                                    <label class="form-check-label small fw-bold" for="{{ form.use_editions_count.id_for_label }}">
+                                        Usar Qtd. de Edições
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-6 col-sm-4">
+                                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Qtd. Edições Padrão</label>
+                                {{ form.default_editions_count }}
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <div class="form-check mt-3">
+                                    {{ form.editions_count_required }}
+                                    <label class="form-check-label small text-danger fw-semibold" for="{{ form.editions_count_required.id_for_label }}">
+                                        Obrigatório?
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Edição Inicial e Final -->
+                        <div class="row g-2 align-items-center">
+                            <div class="col-12 col-sm-4">
+                                <div class="form-check form-switch">
+                                    {{ form.use_initial_final_edition }}
+                                    <label class="form-check-label small fw-bold" for="{{ form.use_initial_final_edition.id_for_label }}">
+                                        Edição Inicial e Final
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-6 col-sm-2">
+                                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Ed. Inicial</label>
+                                {{ form.default_initial_edition }}
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <label class="form-label small text-muted mb-0" style="font-size: 0.72rem;">Ed. Final</label>
+                                {{ form.default_final_edition }}
+                            </div>
+                            <div class="col-12 col-sm-3">
+                                <div class="form-check mt-3">
+                                    {{ form.initial_final_edition_required }}
+                                    <label class="form-check-label small text-danger fw-semibold" for="{{ form.initial_final_edition_required.id_for_label }}">
+                                        Obrigatório?
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Nível de Replicação nas Instâncias Inferiores e Obrigatoriedade de Pessoa -->
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="fw-bold text-dark small mb-2 text-uppercase">
+                            <i class="bi bi-diagram-3-fill text-warning me-1"></i> 4. Nível de Replicação Hierárquica & Vínculo
+                        </div>
+
+                        <div class="alert alert-warning bg-opacity-10 border-warning py-2 px-3 small mb-3">
+                            <i class="bi bi-info-circle-fill me-1"></i>
+                            <strong>Regra de Herança Automática para as Células (<code>d5</code>):</strong>
+                            Todo pagamento é realizado no nível da Célula (<code>d5</code>). Ao selecionar abaixo a instância/nível (a partir do seu nível <code>d{{ user_max_level }}</code>), a receita será herdada automaticamente por todas as Células (<code>d5</code>) que são filhas dessa instância.
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.replication_department.id_for_label }}" class="form-label small fw-bold">
+                                Nível que a Receita se Replicará para as Células (d5) <span class="text-danger">*</span>
+                            </label>
+                            {{ form.replication_department }}
+                            <div class="form-text small">
+                                <i class="bi bi-shield-lock me-1"></i>
+                                Restrito automaticamente ao seu nível máximo de acesso (<code>d{{ user_max_level }}</code> para baixo). Todas as Células (<code>d5</code>) filhas da instância selecionada herdam automaticamente esta receita.
+                            </div>
+                        </div>
+
+                        <!-- Linha Campo Observação -->
+                        <div class="row g-2 align-items-center pt-2 border-top mb-3">
+                            <div class="col-12 col-sm-7">
+                                <div class="form-check form-switch">
+                                    {{ form.use_notes }}
+                                    <label class="form-check-label small fw-bold" for="{{ form.use_notes.id_for_label }}">
+                                        Usar Campo Observação no Lançamento
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-sm-5">
+                                <div class="form-check">
+                                    {{ form.notes_required }}
+                                    <label class="form-check-label small text-danger fw-semibold" for="{{ form.notes_required.id_for_label }}">
+                                        Obrigatório?
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pt-2 border-top">
+                            <div class="form-check form-switch">
+                                {{ form.person_required }}
+                                <label class="form-check-label small fw-bold" for="{{ form.person_required.id_for_label }}">
+                                    Exigir Pessoa Vinculada obrigatoriamente no lançamento?
+                                </label>
+                            </div>
+                            <div class="form-check form-switch">
+                                {{ form.is_active }}
+                                <label class="form-check-label small fw-bold" for="{{ form.is_active.id_for_label }}">
+                                    Receita Ativa
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn {% if editing_category %}btn-primary{% else %}btn-danger{% endif %} fw-semibold py-2">
+                            <i class="bi bi-check2-circle me-1"></i>
+                            {% if editing_category %}Salvar Alterações da Receita{% else %}Cadastrar Receita Personalizada{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna Direita: Lista das Receitas Personalizadas Cadastradas -->
+    <div class="col-12 col-xl-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-list-ul text-danger me-2"></i>Receitas Cadastradas ({{ categories|length }})
+                </h6>
+                <a href="{% url 'objective_create' %}" class="btn btn-sm btn-danger">
+                    <i class="bi bi-plus-circle me-1"></i> Lançar Objetivo com Receita
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Sigla / Receita</th>
+                            <th>Periodicidade</th>
+                            <th>Campos Ativos e Obrigatoriedade</th>
+                            <th>Replicação</th>
+                            <th class="text-end" style="width: 110px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cat in categories %}
+                        <tr class="{% if not cat.is_active %}table-secondary text-muted{% elif editing_category and editing_category.id == cat.id %}table-warning{% endif %}">
+                            <td>
+                                <span class="badge bg-dark">{{ cat.code }}</span>
+                                <div class="fw-bold text-dark mt-1">{{ cat.name }}</div>
+                                {% if cat.is_subscription %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">Assinatura</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if cat.default_frequency == 'MENSAL' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                                    {{ cat.get_default_frequency_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    {% if cat.use_unit_price %}
+                                        <span class="badge bg-light text-dark border">
+                                            Valor Unit.{% if cat.default_unit_price %} (R$ {{ cat.default_unit_price|floatformat:2 }}){% endif %}
+                                            {% if cat.unit_price_required %}<strong class="text-danger">*</strong>{% endif %}
+                                        </span>
+                                    {% endif %}
+                                    {% if cat.use_quantity %}
+                                        <span class="badge bg-light text-dark border">
+                                            Qtd{% if cat.default_quantity %} ({{ cat.default_quantity }}){% endif %}
+                                            {% if cat.quantity_required %}<strong class="text-danger">*</strong>{% endif %}
+                                        </span>
+                                    {% endif %}
+                                    {% if cat.use_editions_count %}
+                                        <span class="badge bg-light text-dark border">
+                                            Qtd Edições{% if cat.default_editions_count %} ({{ cat.default_editions_count }}){% endif %}
+                                            {% if cat.editions_count_required %}<strong class="text-danger">*</strong>{% endif %}
+                                        </span>
+                                    {% endif %}
+                                    {% if cat.use_initial_final_edition %}
+                                        <span class="badge bg-light text-dark border">
+                                            Ed. Inicial/Final
+                                            {% if cat.initial_final_edition_required %}<strong class="text-danger">*</strong>{% endif %}
+                                        </span>
+                                    {% endif %}
+                                    {% if cat.use_notes %}
+                                        <span class="badge bg-light text-dark border">
+                                            Observação
+                                            {% if cat.notes_required %}<strong class="text-danger">*</strong>{% endif %}
+                                        </span>
+                                    {% endif %}
+                                    {% if cat.person_required %}
+                                        <span class="badge bg-light text-dark border">
+                                            Pessoa <strong class="text-danger">*</strong>
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-warning text-dark">
+                                    Nível d{{ cat.replication_level }} → Células d5
+                                </span>
+                                {% if cat.target_depts_list %}
+                                    <div class="d-flex flex-wrap gap-1 mt-1">
+                                        {% for d in cat.target_depts_list %}
+                                            <span class="badge bg-light text-dark border" title="{{ d.name }}">{{ d.code }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if cat.can_user_edit %}
+                                <div class="d-inline-flex align-items-center justify-content-end gap-1">
+                                    <a href="{% url 'category_list' %}?edit={{ cat.id }}#revenueFormCard"
+                                       class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                       style="width: 32px; height: 32px;"
+                                       title="Editar configuração da receita">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </a>
+                                    <form method="post" action="{% url 'category_delete' cat.id %}" class="d-inline m-0">
+                                        {% csrf_token %}
+                                        <button type="submit"
+                                                class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center"
+                                                style="width: 32px; height: 32px;"
+                                                title="Remover ou ocultar receita">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="badge bg-light text-muted border" title="Receita criada em nível superior ao seu escopo de gestão">
+                                    <i class="bi bi-lock"></i> Somente Leitura
+                                </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-5">
+                                <i class="bi bi-sliders2 fs-2 d-block mb-2 text-secondary"></i>
+                                Nenhuma receita cadastrada ainda. Utilize o formulário ao lado para criar suas receitas personalizadas!
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Quando marca "É uma Assinatura?", habilita automaticamente Edição Inicial/Final e Qtd de Edições como sugestão
+    const subSwitch = document.getElementById('{{ form.is_subscription.id_for_label }}');
+    const useEdCount = document.getElementById('{{ form.use_editions_count.id_for_label }}');
+    const useInitFinal = document.getElementById('{{ form.use_initial_final_edition.id_for_label }}');
+
+    if (subSwitch) {
+        subSwitch.addEventListener('change', function () {
+            if (this.checked) {
+                if (useEdCount) useEdCount.checked = true;
+                if (useInitFinal) useInitFinal.checked = true;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+

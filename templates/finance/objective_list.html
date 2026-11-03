@@ -1,0 +1,331 @@
+{% extends 'base.html' %}
+
+{% block title %}Objetivos Financeiros | OCI Finance{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho da Página -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            <i class="bi bi-bullseye text-danger me-2"></i>Objetivos Financeiros & Receitas
+        </h2>
+    </div>
+    <div class="d-flex gap-2 mt-2 mt-sm-0">
+        {% if show_inactive %}
+            <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-dark">
+                <i class="bi bi-eye me-1"></i> Ver Objetivos Ativos
+            </a>
+        {% else %}
+            <a href="{% url 'objective_list' %}?ocultos=1" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-eye-slash me-1"></i> Ver Ocultos
+            </a>
+        {% endif %}
+
+        <a href="{% url 'category_list' %}" class="btn btn-sm btn-outline-dark">
+            <i class="bi bi-sliders2 me-1"></i> Configurar Receitas
+        </a>
+
+        <a href="{% url 'settlement_list' %}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-cash-coin me-1"></i> Histórico de Pagamentos
+        </a>
+
+        {% if can_add_objective %}
+            <a href="{% url 'objective_create' %}" class="btn btn-sm btn-danger fw-semibold">
+                <i class="bi bi-plus-circle-fill me-1"></i> Lançar Objetivo Financeiro
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Cards de Resumo Financeiro do Filtro Atual -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
+            <div class="card-body py-3">
+                <div class="text-muted small fw-semibold text-uppercase">Total Objetivo (Previsto)</div>
+                <div class="h4 fw-bold text-dark mb-0">R$ {{ total_expected|floatformat:2 }}</div>
+                <small class="text-muted">{{ objectives|length }} lançamento{{ objectives|length|pluralize:"s" }} listado{{ objectives|length|pluralize:"s" }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
+            <div class="card-body py-3">
+                <div class="text-muted small fw-semibold text-uppercase">Valor Efetivo Pago</div>
+                <div class="h4 fw-bold text-success mb-0">R$ {{ total_paid_effective|floatformat:2 }}</div>
+                <small class="text-muted">Soma real recebida nos objetivos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-4 {% if total_difference >= 0 %}border-info{% else %}border-warning{% endif %}">
+            <div class="card-body py-3">
+                <div class="text-muted small fw-semibold text-uppercase">Diferença (Efetivo − Objetivo)</div>
+                <div class="h4 fw-bold {% if total_difference > 0 %}text-primary{% elif total_difference < 0 %}text-danger{% else %}text-dark{% endif %} mb-0">
+                    {% if total_difference > 0 %}+{% endif %}R$ {{ total_difference|floatformat:2 }}
+                </div>
+                <small class="text-muted">Saldo entre previsto e realizado</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100 border-start border-4 border-dark">
+            <div class="card-body py-3">
+                <div class="text-muted small fw-semibold text-uppercase">Situação dos Objetivos</div>
+                <div class="h4 fw-bold text-dark mb-0">
+                    {{ settled_count }} <small class="fs-6 fw-normal text-success">quitado{{ settled_count|pluralize:"s" }}</small>
+                </div>
+                <small class="text-warning fw-semibold">{{ pending_count }} pendente{{ pending_count|pluralize:"s" }}</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Barra de Filtros (Ciclo Mensal, Categoria, Periodicidade, Instância, Situação) -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-3">
+        <form method="get" action="{% url 'objective_list' %}" class="row g-2 align-items-end">
+            {% if show_inactive %}
+                <input type="hidden" name="ocultos" value="1">
+            {% endif %}
+            <div class="col-12 col-md-3">
+                <label class="form-label small fw-bold text-muted mb-1">Buscar Lançamento</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome, pessoa, edição, instância...">
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-muted mb-1">Ciclo Mensal</label>
+                <input type="month" name="mes" value="{{ month_filter }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-muted mb-1">Tipo / Categoria</label>
+                <select name="category" class="form-select form-select-sm">
+                    <option value="">Todas as Categorias</option>
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if category_filter == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small fw-bold text-muted mb-1">Instância (+ Filhas)</label>
+                <select name="department" class="form-select form-select-sm">
+                    <option value="">Todo o meu escopo</option>
+                    {% for item in cascade_depts %}
+                        <option value="{{ item.department.id }}" {% if dept_filter == item.department.id %}selected{% endif %}>
+                            {{ item.level_tag|upper }} • {{ item.path_display }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-1">
+                <label class="form-label small fw-bold text-muted mb-1">Situação</label>
+                <select name="settled" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    <option value="0" {% if settled_filter == '0' %}selected{% endif %}>Pendentes</option>
+                    <option value="1" {% if settled_filter == '1' %}selected{% endif %}>Quitados</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-sm btn-dark w-100">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
+                </button>
+                <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-secondary" title="Limpar filtros">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabela de Objetivos Financeiros -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="m-0 fw-bold">
+            <i class="bi bi-list-check text-danger me-2"></i>Objetivos Financeiros Lançados ({{ objectives|length }})
+        </h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light small">
+                <tr>
+                    <th>Descrição / Categoria</th>
+                    <th>Detalhes (Edição / Qtd × Unid.)</th>
+                    <th>Instância & Pessoa</th>
+                    <th>Ciclo / Vencimento</th>
+                    <th class="text-end">Valor Objetivo</th>
+                    <th class="text-end">Pagamento Efetivo</th>
+                    <th class="text-center">Situação</th>
+                    <th class="text-end" style="width: 175px;">Ações</th>
+                </tr>
+            </thead>
+            <tbody class="small">
+                {% for obj in objectives %}
+                <tr class="{% if not obj.is_active %}table-secondary text-muted{% endif %}">
+                    <td>
+                        <div class="fw-bold text-dark">{{ obj.title }}</div>
+                        <div class="d-flex flex-wrap align-items-center gap-1 mt-1">
+                            <span class="badge bg-dark">{{ obj.category.name }}</span>
+                            {% if obj.frequency == 'MENSAL' %}
+                                <span class="badge bg-info text-dark">Ciclo Mensal</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Único</span>
+                            {% endif %}
+                            {% if obj.origin_department and obj.origin_department_id != obj.department_id %}
+                                <span class="badge bg-warning bg-opacity-25 text-dark border border-warning"
+                                      title="Objetivo replicado a partir da instância superior {{ obj.origin_department.code }} — {{ obj.origin_department.name }}">
+                                    <i class="bi bi-diagram-2-fill me-1"></i>Replicado de {{ obj.origin_department.code }}
+                                </span>
+                            {% elif obj.parent_objective %}
+                                <span class="badge bg-warning bg-opacity-25 text-dark border border-warning"
+                                      title="Objetivo herdado da instância superior {{ obj.parent_objective.department.code }}">
+                                    <i class="bi bi-diagram-2-fill me-1"></i>Herdado de {{ obj.parent_objective.department.code }}
+                                </span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if obj.initial_edition or obj.final_edition %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                <i class="bi bi-newspaper me-1"></i>Edição {{ obj.initial_edition|default:"?" }} até {{ obj.final_edition|default:"?" }}
+                            </span>
+                        {% elif obj.target_quantity and obj.unit_price %}
+                            <div>
+                                {% if obj.edition_number %}
+                                    <span class="fw-semibold text-dark">{{ obj.edition_number }}</span> •
+                                {% endif %}
+                                <span class="badge bg-light text-dark border">
+                                    {{ obj.target_quantity }} un. × R$ {{ obj.unit_price|floatformat:2 }}
+                                </span>
+                            </div>
+                        {% elif obj.edition_number %}
+                            <span class="badge bg-light text-dark border">{{ obj.edition_number }}</span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div>
+                            <span class="badge bg-light text-dark border fw-bold">{{ obj.department.code }}</span>
+                            <span class="text-muted">{{ obj.department.name }}</span>
+                        </div>
+                        {% if obj.target_person %}
+                            <div class="mt-1 text-dark">
+                                <i class="bi bi-person-fill text-danger me-1"></i>{{ obj.target_person.name }}
+                            </div>
+                        {% else %}
+                            <div class="mt-1 text-muted fst-italic">Meta geral da instância</div>
+                        {% endif %}
+                        {% if obj.unlinked_at %}
+                            <div class="mt-1">
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25"
+                                      title="Vínculo mantido na instância {{ obj.department.code }} até {{ obj.unlinked_at|date:'d/m/Y H:i' }}">
+                                    <i class="bi bi-clock-history me-1"></i>Vinculado até {{ obj.unlinked_at|date:"d/m/Y" }}
+                                </span>
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if obj.reference_month %}
+                            <div class="fw-semibold text-dark">{{ obj.reference_month|date:"m/Y" }}</div>
+                        {% endif %}
+                        <div class="text-muted" style="font-size: 0.76rem;">
+                            Venc: {{ obj.due_date|date:"d/m/Y" }}
+                        </div>
+                    </td>
+                    <td class="text-end fw-bold text-dark">
+                        R$ {{ obj.target_amount|floatformat:2 }}
+                    </td>
+                    <td class="text-end">
+                        <div class="fw-bold {% if obj.paid_val > obj.target_amount %}text-primary{% elif obj.paid_val > 0 %}text-success{% else %}text-muted{% endif %}">
+                            R$ {{ obj.paid_val|floatformat:2 }}
+                        </div>
+                        {% if obj.paid_val > 0 and obj.diff_val != 0 %}
+                            <div style="font-size: 0.72rem;" class="{% if obj.diff_val > 0 %}text-primary{% else %}text-danger{% endif %}">
+                                {% if obj.diff_val > 0 %}
+                                    +R$ {{ obj.diff_val|floatformat:2 }} (acima)
+                                {% else %}
+                                    R$ {{ obj.diff_val|floatformat:2 }} (abaixo)
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if obj.is_settled %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle-fill me-1"></i>Quitado
+                            </span>
+                        {% elif obj.paid_val > 0 %}
+                            <span class="badge bg-info text-dark">
+                                Parcial
+                            </span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">
+                                Pendente
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="d-inline-flex align-items-center justify-content-end gap-1">
+                            <!-- Botão Duplicar Registro (Objetivos Únicos) -->
+                            {% if obj.can_user_duplicate %}
+                                <form method="post" action="{% url 'objective_duplicate_next_period' obj.id %}" class="d-inline m-0">
+                                    {% csrf_token %}
+                                    <button type="submit"
+                                            class="btn btn-sm btn-outline-dark d-inline-flex align-items-center justify-content-center"
+                                            style="width: 32px; height: 32px;"
+                                            title="Duplicar este objetivo único para o período seguinte">
+                                        <i class="bi bi-calendar-plus"></i>
+                                    </button>
+                                </form>
+                            {% endif %}
+
+                            <!-- Botão Editar -->
+                            {% if obj.can_user_edit %}
+                                <a href="{% url 'objective_update' obj.id %}"
+                                   class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                   style="width: 32px; height: 32px;"
+                                   title="Editar objetivo">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                            {% endif %}
+
+                            <!-- Botão Ocultar / Reativar -->
+                            {% if obj.can_user_toggle %}
+                                <form method="post" action="{% url 'objective_toggle_active' obj.id %}" class="d-inline m-0">
+                                    {% csrf_token %}
+                                    {% if obj.is_active %}
+                                        <button type="submit"
+                                                class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+                                                style="width: 32px; height: 32px;"
+                                                title="Ocultar objetivo">
+                                            <i class="bi bi-eye-slash"></i>
+                                        </button>
+                                    {% else %}
+                                        <button type="submit"
+                                                class="btn btn-sm btn-outline-success d-inline-flex align-items-center justify-content-center"
+                                                style="width: 32px; height: 32px;"
+                                                title="Reativar objetivo">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    {% endif %}
+                                </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-5">
+                        <i class="bi bi-bullseye fs-2 d-block mb-2 text-secondary"></i>
+                        Nenhum objetivo financeiro encontrado para os filtros selecionados.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
