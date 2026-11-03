@@ -1,0 +1,415 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if person %}Editar Pessoa: {{ person.name }}{% else %}Nova Pessoa{% endif %} | OCI Finance{% endblock %}
+
+{% block extra_css %}
+<style>
+    .level-badge-d1 { background-color: #212529; color: #fff; }
+    .level-badge-d2 { background-color: #dc3545; color: #fff; }
+    .level-badge-d3 { background-color: #0d6efd; color: #fff; }
+    .level-badge-d4 { background-color: #198754; color: #fff; }
+    .level-badge-d5 { background-color: #6c757d; color: #fff; }
+    .dept-select-row {
+        transition: background-color 0.15s ease;
+    }
+    .dept-select-row:hover {
+        background-color: rgba(33, 37, 41, 0.04);
+    }
+    .dept-indent-label {
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            {% if person %}
+                <i class="bi bi-pencil-square text-primary me-2"></i>Editar Cadastro: {{ person.name }}
+            {% else %}
+                <i class="bi bi-person-plus-fill text-danger me-2"></i>Novo Cadastro de Pessoa
+            {% endif %}
+        </h2>
+        <p class="text-muted small mb-0">
+            Configure os dados pessoais, os grupos/perfis (01 a 06), o vínculo por instância e o acesso de login.
+        </p>
+    </div>
+    <div>
+        <a href="{% url 'person_list' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Voltar para Lista de Pessoas
+        </a>
+    </div>
+</div>
+
+<form method="post" novalidate id="personForm"
+      data-militant-group-id="{{ militant_group_id }}"
+      data-full-access-group-ids="{{ full_access_group_ids_csv }}">
+    {% csrf_token %}
+
+    {% if form.errors %}
+        <div class="alert alert-danger shadow-sm">
+            <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> Verifique os campos abaixo:</div>
+            <ul class="mb-0 small">
+                {% for field in form %}
+                    {% for error in field.errors %}
+                        <li><strong>{{ field.label }}:</strong> {{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Coluna Esquerda: Dados Pessoais e Vínculo com Instâncias -->
+        <div class="col-12 col-xl-7">
+            <!-- Card 1: Dados Básicos -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-dark text-white py-3">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-person-vcard text-danger me-2"></i>1. Identificação da Pessoa
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-7">
+                            <label for="{{ form.name.id_for_label }}" class="form-label small fw-bold">
+                                Nome Completo <span class="text-danger">*</span>
+                            </label>
+                            {{ form.name }}
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <label for="{{ form.nickname.id_for_label }}" class="form-label small fw-bold">
+                                Apelido / Nome Social
+                            </label>
+                            {{ form.nickname }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.phone.id_for_label }}" class="form-label small fw-bold">
+                                Telefone / WhatsApp
+                            </label>
+                            {{ form.phone }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.email.id_for_label }}" class="form-label small fw-bold">
+                                E-mail
+                            </label>
+                            {{ form.email }}
+                        </div>
+
+                        <div class="col-12" id="responsibleMilitantWrapper">
+                            <label for="{{ form.responsible_militant.id_for_label }}" class="form-label small fw-bold">
+                                Militante Responsável pelo Acompanhamento <span class="text-danger" id="respRequiredStar">*</span>
+                            </label>
+                            {{ form.responsible_militant }}
+                            <div class="form-text small">
+                                Obrigatório para <strong>05 - Contribuinte</strong> e <strong>06 - Contato</strong> (acompanhamento e recolhimento de contribuições).
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Vínculo com Instâncias / Células (Adapta-se conforme Grupo 04 - Militante) -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-diagram-3-fill text-danger me-2"></i>2. Vínculo com Instâncias (Departamentos / Células)
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <!-- Modo A: Usuário Administrador ou Militante selecionado -->
+                    <div id="militantDeptsSection" style="display: none;">
+                        <div class="alert alert-success border small mb-3" id="fullAccessOptionalAlert" style="display: none;">
+                            <i class="bi bi-award-fill me-1"></i>
+                            <strong>Usuário Administrador:</strong>
+                            Esta pessoa possui acesso administrativo irrestrito e <strong>não precisa estar vinculada a nenhuma instância nem a um Militante Responsável</strong> (o vínculo abaixo é totalmente opcional).
+                        </div>
+                        <div class="alert alert-light border small mb-3" id="militantRequiredAlert">
+                            <i class="bi bi-info-circle-fill text-danger me-1"></i>
+                            <strong>Regra para Militante:</strong> Pode ser vinculado a uma ou mais instâncias de qualquer nível (<code>d1</code> a <code>d5</code>).
+                            <div class="mt-1">
+                                • <strong>Apenas Visualização:</strong> enxerga a instância e seus filhos, mas não edita.<br>
+                                • <strong>Acesso Total (Gerir):</strong> pode criar, editar e ocultar registros na instância e em todas as subordinadas abaixo dela.
+                            </div>
+                        </div>
+
+                        <div class="table-responsive border rounded" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light small sticky-top">
+                                    <tr>
+                                        <th style="width: 42px;" class="text-center">Vincular</th>
+                                        <th>Instância (Cascata)</th>
+                                        <th style="width: 230px;">Nível de Acesso na Instância</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="small">
+                                    {% for item in manageable_cascade %}
+                                    <tr class="dept-select-row">
+                                        <td class="text-center">
+                                            <input type="checkbox"
+                                                   class="form-check-input militant-dept-checkbox"
+                                                   name="militant_departments"
+                                                   value="{{ item.department.id }}"
+                                                   id="dept_chk_{{ item.department.id }}"
+                                                   data-dept-id="{{ item.department.id }}"
+                                                   {% if item.is_selected %}checked{% endif %}>
+                                        </td>
+                                        <td>
+                                            <label for="dept_chk_{{ item.department.id }}"
+                                                   class="d-flex align-items-center mb-0 dept-indent-label"
+                                                   data-indent="{{ item.indent_px }}">
+                                                {% if item.relative_depth > 0 %}
+                                                    <span class="text-muted me-1"><i class="bi bi-arrow-return-right"></i></span>
+                                                {% endif %}
+                                                <span class="badge level-badge-{{ item.level_tag }} me-1">{{ item.level_tag }}</span>
+                                                <span class="fw-bold text-dark me-1">{{ item.department.code }}</span>
+                                                <span class="text-muted">— {{ item.department.name }}</span>
+                                            </label>
+                                        </td>
+                                        <td>
+                                            <select name="role_{{ item.department.id }}"
+                                                    id="role_sel_{{ item.department.id }}"
+                                                    class="form-select form-select-sm"
+                                                    {% if not item.is_selected %}disabled{% endif %}>
+                                                <option value="MANAGE" {% if item.selected_role == 'MANAGE' %}selected{% endif %}>
+                                                    Acesso Total (Gerir + Cascata)
+                                                </option>
+                                                <option value="VIEW" {% if item.selected_role == 'VIEW' %}selected{% endif %}>
+                                                    Apenas Visualização
+                                                </option>
+                                            </select>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Modo B: Sem o Grupo 04 - Militante (ex: 05 - Contribuinte ou 06 - Contato -> Vinculado a uma Célula) -->
+                    <div id="cellDeptSection" style="display: none;">
+                        <div class="alert alert-light border small mb-3">
+                            <i class="bi bi-info-circle-fill text-primary me-1"></i>
+                            <strong>Regra para 04 - Contribuinte / 05 - Contato:</strong> Vinculado a uma <strong>Célula</strong> e a um <strong>Militante Responsável</strong>. Marque o grupo <code>03 - Militante</code> ao lado caso esta pessoa deva ser vinculada a múltiplos departamentos ou instâncias superiores.
+                        </div>
+
+                        <label for="cell_department_select" class="form-label small fw-bold">
+                            Célula de Vínculo <span class="text-danger">*</span>
+                        </label>
+                        <select name="cell_department" id="cell_department_select" class="form-select">
+                            <option value="">Selecione a Célula...</option>
+                            {% for item in cell_items %}
+                                <option value="{{ item.department.id }}" {% if selected_cell_id == item.department.id %}selected{% endif %}>
+                                    {{ item.department.code }} — {{ item.department.name }} (Caminho: {{ item.path_display }})
+                                </option>
+                            {% empty %}
+                                {% for item in manageable_cascade %}
+                                    <option value="{{ item.department.id }}" {% if selected_cell_id == item.department.id %}selected{% endif %}>
+                                        {{ item.department.code }} — {{ item.department.name }} ({{ item.path_display }})
+                                    </option>
+                                {% endfor %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna Direita: Os 6 Grupos / Perfis (Mínimo 1) + Ganhar/Perder Acesso de Usuário -->
+        <div class="col-12 col-xl-5">
+            <!-- Card 3: Grupos / Perfis (01 a 06) -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-key-fill text-warning me-2"></i>3. Grupos e Perfis <span class="text-danger">*</span>
+                    </h6>
+                    <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 small" id="selectAllGroupsBtn">
+                        Marcar Todos
+                    </button>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Selecione <strong>pelo menos 1 grupo</strong> compatível com o seu nível de permissão. Os grupos definem os direitos de acesso e a classificação nos relatórios analíticos:
+                    </p>
+                    <div class="list-group">
+                        {% for checkbox in form.groups %}
+                            <label class="list-group-item list-group-item-action d-flex align-items-center gap-2 small">
+                                {{ checkbox.tag }}
+                                <span class="fw-semibold text-dark">{{ checkbox.choice_label }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4: Perfil de Usuário (Ganhar / Perder Login no Sistema) -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-dark text-white py-3">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-shield-lock-fill text-danger me-2"></i>4. Credencial de Usuário (Login no Sistema)
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        {{ form.has_login }}
+                        <label class="form-check-label fw-bold text-dark" for="{{ form.has_login.id_for_label }}">
+                            Permitir que esta pessoa faça login no sistema
+                        </label>
+                        <div class="form-text small">
+                            Você pode conceder ou remover o perfil de usuário a qualquer momento. Ao desmarcar, o login é revogado imediatamente sem apagar o histórico da pessoa.
+                        </div>
+                    </div>
+
+                    <div id="loginCredentialsFields" class="p-3 bg-light rounded border" style="display: none;">
+                        <div class="mb-3">
+                            <label for="{{ form.username.id_for_label }}" class="form-label small fw-bold">
+                                Nome de Usuário (Login) <span class="text-danger">*</span>
+                            </label>
+                            {{ form.username }}
+                        </div>
+                        <div class="mb-0">
+                            <label for="{{ form.password.id_for_label }}" class="form-label small fw-bold">
+                                {% if person and person.user %}
+                                    Nova Senha (deixe em branco para manter a atual)
+                                {% else %}
+                                    Senha Inicial <span class="text-danger">*</span>
+                                {% endif %}
+                            </label>
+                            {{ form.password }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 5: Visibilidade (Ativo / Oculto) e Botão Salvar -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        {{ form.is_active }}
+                        <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">
+                            Cadastro Ativo (Visível nas listagens e relatórios)
+                        </label>
+                        <div class="form-text small">
+                            Nada é excluído do banco: desmarque caso queira apenas ocultar este cadastro.
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-danger fw-semibold py-2">
+                            <i class="bi bi-check2-circle me-1"></i>
+                            {% if person %}Salvar Alterações da Pessoa{% else %}Cadastrar Pessoa{% endif %}
+                        </button>
+                        <a href="{% url 'person_list' %}" class="btn btn-outline-secondary btn-sm">
+                            Cancelar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.dept-indent-label').forEach(function (el) {
+        const indent = el.getAttribute('data-indent') || '0';
+        el.style.paddingLeft = indent + 'px';
+    });
+
+    const formEl = document.getElementById('personForm');
+    const militantGroupId = formEl ? String(formEl.getAttribute('data-militant-group-id')) : '';
+    const fullAccessCsv = formEl ? (formEl.getAttribute('data-full-access-group-ids') || '') : '';
+    const fullAccessIds = fullAccessCsv.split(',').map(s => s.trim()).filter(Boolean);
+
+    const militantDeptsSection = document.getElementById('militantDeptsSection');
+    const cellDeptSection = document.getElementById('cellDeptSection');
+    const respStar = document.getElementById('respRequiredStar');
+    const fullAccessOptionalAlert = document.getElementById('fullAccessOptionalAlert');
+    const militantRequiredAlert = document.getElementById('militantRequiredAlert');
+
+    function updateGroupBasedSections() {
+        const groupCheckboxes = document.querySelectorAll('input[name="groups"]');
+        let isMilitantChecked = false;
+        let isFullAccessChecked = false;
+
+        groupCheckboxes.forEach(function (chk) {
+            if (chk.checked) {
+                const val = String(chk.value);
+                const labelText = chk.parentElement.textContent || '';
+                if (val === militantGroupId || labelText.includes('Militante')) {
+                    isMilitantChecked = true;
+                }
+                if (fullAccessIds.includes(val)) {
+                    isFullAccessChecked = true;
+                }
+            }
+        });
+
+        if (isMilitantChecked || isFullAccessChecked) {
+            militantDeptsSection.style.display = 'block';
+            cellDeptSection.style.display = 'none';
+            if (respStar) respStar.style.display = 'none';
+            if (fullAccessOptionalAlert) {
+                fullAccessOptionalAlert.style.display = isFullAccessChecked ? 'block' : 'none';
+            }
+            if (militantRequiredAlert) {
+                militantRequiredAlert.style.display = isFullAccessChecked ? 'none' : 'block';
+            }
+        } else {
+            militantDeptsSection.style.display = 'none';
+            cellDeptSection.style.display = 'block';
+            if (respStar) respStar.style.display = 'inline';
+        }
+    }
+
+    document.querySelectorAll('input[name="groups"]').forEach(function (chk) {
+        chk.addEventListener('change', updateGroupBasedSections);
+    });
+    updateGroupBasedSections();
+
+    // Habilita/desabilita o select de papel (VIEW/MANAGE) quando marca/desmarca uma instância
+    const deptCheckboxes = document.querySelectorAll('.militant-dept-checkbox');
+    deptCheckboxes.forEach(function (chk) {
+        chk.addEventListener('change', function () {
+            const deptId = this.getAttribute('data-dept-id');
+            const roleSel = document.getElementById('role_sel_' + deptId);
+            if (roleSel) {
+                roleSel.disabled = !this.checked;
+            }
+        });
+    });
+
+    // Exibe/oculta campos de Usuário e Senha conforme o switch has_login
+    const hasLoginSwitch = document.getElementById('{{ form.has_login.id_for_label }}');
+    const loginFields = document.getElementById('loginCredentialsFields');
+    function updateLoginFields() {
+        if (hasLoginSwitch && loginFields) {
+            loginFields.style.display = hasLoginSwitch.checked ? 'block' : 'none';
+        }
+    }
+    if (hasLoginSwitch) {
+        hasLoginSwitch.addEventListener('change', updateLoginFields);
+        updateLoginFields();
+    }
+
+    // Botão "Marcar Todos" os grupos
+    const selectAllGroupsBtn = document.getElementById('selectAllGroupsBtn');
+    if (selectAllGroupsBtn) {
+        selectAllGroupsBtn.addEventListener('click', function () {
+            const groupCheckboxes = document.querySelectorAll('input[name="groups"]');
+            const allChecked = Array.from(groupCheckboxes).every(c => c.checked);
+            groupCheckboxes.forEach(c => { c.checked = !allChecked; });
+            this.textContent = allChecked ? 'Marcar Todos' : 'Desmarcar Todos';
+            updateGroupBasedSections();
+        });
+    }
+});
+</script>
+{% endblock %}

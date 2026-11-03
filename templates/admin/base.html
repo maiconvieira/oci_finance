@@ -1,0 +1,811 @@
+{% load i18n static %}<!DOCTYPE html>
+{% get_current_language as LANGUAGE_CODE %}{% get_current_language_bidi as LANGUAGE_BIDI %}
+<html lang="{{ LANGUAGE_CODE|default:"pt-br" }}" dir="{{ LANGUAGE_BIDI|yesno:'rtl,ltr,auto' }}" data-theme="light">
+<head>
+<title>{% block title %}{% endblock %}</title>
+<link rel="stylesheet" href="{% block stylesheet %}{% static "admin/css/base.css" %}{% endblock %}">
+{% block dark-mode-vars %}{% endblock %}
+{% block extrastyle %}{% endblock %}
+{% if LANGUAGE_BIDI %}<link rel="stylesheet" href="{% block stylesheet_rtl %}{% static "admin/css/rtl.css" %}{% endblock %}">{% endif %}
+{% block extrahead %}{% endblock %}
+{% block responsive %}
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{% static "admin/css/responsive.css" %}">
+    {% if LANGUAGE_BIDI %}<link rel="stylesheet" href="{% static "admin/css/responsive_rtl.css" %}">{% endif %}
+{% endblock %}
+<!-- Bootstrap Icons CDN (Apenas ícones, sem conflito de reset CSS com o Django Admin) -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+    /* ==========================================================================
+       1. VARIÁVEIS DE TEMA DO DJANGO ADMIN (Paleta OCI Finance)
+       ========================================================================== */
+    :root, html[data-theme="light"], html[data-theme="dark"] {
+        --primary: #212529;
+        --secondary: #dc3545;
+        --accent: #dc3545;
+        --primary-fg: #ffffff;
+        --body-fg: #212529;
+        --body-bg: #f8f9fa;
+        --body-quiet-color: #6c757d;
+        --body-loud-color: #000000;
+        --header-color: #ffffff;
+        --header-branding-color: #ffffff;
+        --header-bg: #212529;
+        --header-link-color: #f8f9fa;
+        --breadcrumbs-fg: #6c757d;
+        --breadcrumbs-link-fg: #dc3545;
+        --breadcrumbs-bg: #ffffff;
+        --link-fg: #0d6efd;
+        --link-hover-color: #0a58ca;
+        --link-selected-fg: #dc3545;
+        --hairline-color: #dee2e6;
+        --border-color: #dee2e6;
+        --error-fg: #dc3545;
+        --message-success-bg: #d1e7dd;
+        --message-warning-bg: #fff3cd;
+        --message-error-bg: #f8d7da;
+        --darkened-bg: #f8f9fa;
+        --selected-bg: #e9ecef;
+        --selected-row: #fff3cd;
+        --button-fg: #ffffff;
+        --button-bg: #0d6efd;
+        --button-hover-bg: #0b5ed7;
+        --default-button-bg: #198754;
+        --default-button-hover-bg: #157347;
+        --close-button-bg: #6c757d;
+        --close-button-hover-bg: #5c636a;
+        --delete-button-bg: #dc3545;
+        --delete-button-hover-bg: #bb2d3b;
+        --object-tools-fg: #ffffff;
+        --object-tools-bg: #dc3545;
+        --object-tools-hover-bg: #bb2d3b;
+    }
+
+    /* ==========================================================================
+       2. ESTRUTURA GLOBAL E SIDEBAR IDÊNTICA AO FRONTEND (Escopada sem Bootstrap CSS)
+       ========================================================================== */
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background-color: #f8f9fa !important;
+        color: #212529 !important;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif !important;
+        font-size: 0.9375rem;
+        line-height: 1.5;
+    }
+
+    /* Oculta elementos redundantes de navegação nativa do Django Admin */
+    #header,
+    #nav-sidebar,
+    #toggle-nav-sidebar,
+    .theme-toggle {
+        display: none !important;
+    }
+
+    .oci-layout {
+        display: flex;
+        min-height: 100vh;
+        width: 100%;
+    }
+
+    .oci-sidebar {
+        width: 300px;
+        min-height: 100vh;
+        background-color: #212529;
+        color: #ffffff;
+        flex-shrink: 0;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+
+    .oci-brand {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+        color: #ffffff !important;
+        text-decoration: none !important;
+    }
+
+    .oci-brand-icon {
+        font-size: 1.75rem;
+        color: #dc3545;
+        margin-right: 0.5rem;
+        line-height: 1;
+    }
+
+    .oci-brand-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        display: block;
+        color: #ffffff;
+        line-height: 1.2;
+    }
+
+    .oci-brand-subtitle {
+        font-size: 0.75rem;
+        color: #6c757d;
+        display: block;
+    }
+
+    .oci-divider {
+        border: 0;
+        border-top: 1px solid #6c757d;
+        opacity: 0.35;
+        margin: 1rem 0;
+    }
+
+    .oci-login-box {
+        background-color: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+
+    .oci-user-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .oci-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #dc3545;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        margin-right: 0.65rem;
+        flex-shrink: 0;
+        font-size: 1rem;
+    }
+
+    .oci-user-info {
+        overflow: hidden;
+    }
+
+    .oci-user-name {
+        font-weight: 600;
+        color: #ffffff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 0.95rem;
+    }
+
+    .oci-user-handle {
+        font-size: 0.8rem;
+        color: #adb5bd;
+        display: block;
+    }
+
+    .oci-dept-box {
+        margin-top: 0.65rem;
+        padding-top: 0.65rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+        font-size: 0.8rem;
+    }
+
+    .oci-dept-label {
+        color: #adb5bd;
+        display: block;
+        margin-bottom: 0.35rem;
+    }
+
+    .oci-badge-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .oci-badge {
+        background-color: #6c757d;
+        color: #ffffff;
+        padding: 0.2em 0.55em;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-radius: 0.375rem;
+    }
+
+    .oci-btn-logout {
+        margin-top: 0.85rem;
+        width: 100%;
+        background: transparent !important;
+        color: #f8f9fa !important;
+        border: 1px solid #f8f9fa !important;
+        border-radius: 0.3rem !important;
+        padding: 0.35rem 0.75rem !important;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease-in-out;
+    }
+
+    .oci-btn-logout:hover {
+        background-color: #f8f9fa !important;
+        color: #212529 !important;
+    }
+
+    .oci-menu-label {
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        color: #6c757d;
+        font-weight: 700;
+        font-size: 0.72rem;
+        letter-spacing: 0.05em;
+    }
+
+    .oci-nav {
+        list-style: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .oci-nav li {
+        list-style: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .oci-nav-link {
+        color: rgba(255, 255, 255, 0.8) !important;
+        border-radius: 0.375rem;
+        margin-bottom: 0.25rem;
+        padding: 0.6rem 0.85rem;
+        text-decoration: none !important;
+        display: flex;
+        align-items: center;
+        font-size: 0.95rem;
+        font-weight: 400;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .oci-nav-link i {
+        margin-right: 0.55rem;
+        font-size: 1.05rem;
+    }
+
+    .oci-nav-link:hover,
+    .oci-nav-link.active {
+        color: #ffffff !important;
+        background-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .oci-nav-link.oci-admin-link {
+        color: #ffc107 !important;
+    }
+
+    .oci-sidebar-footer {
+        padding-top: 1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
+        color: #6c757d;
+        font-size: 0.825rem;
+    }
+
+    /* ==========================================================================
+       3. ÁREA DE CONTEÚDO PRINCIPAL DO ADMIN (Alinhamento e Cards Limpos)
+       ========================================================================== */
+    .oci-main {
+        flex-grow: 1;
+        min-width: 0;
+        padding: 1.5rem 2rem;
+        background-color: #f8f9fa;
+    }
+
+    #container {
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: auto !important;
+        display: block !important;
+        background: transparent !important;
+    }
+
+    #main, .main {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    #content {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Breadcrumbs estilo barra limpa do frontend */
+    div.breadcrumbs {
+        background: #ffffff !important;
+        color: #6c757d !important;
+        padding: 0.7rem 1.15rem !important;
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+        font-size: 0.85rem;
+    }
+
+    div.breadcrumbs a {
+        color: #dc3545 !important;
+        font-weight: 600;
+        text-decoration: none !important;
+    }
+
+    div.breadcrumbs a:hover {
+        text-decoration: underline !important;
+    }
+
+    /* Cabeçalho da página e botão "Adicionar +" alinhados lado a lado */
+    .oci-admin-header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.25rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid #dee2e6;
+        gap: 0.75rem;
+    }
+
+    .oci-admin-header h1 {
+        font-size: 1.35rem !important;
+        font-weight: 700 !important;
+        color: #212529 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    ul.object-tools {
+        float: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    ul.object-tools li {
+        float: none !important;
+        margin: 0 !important;
+        list-style: none !important;
+    }
+
+    ul.object-tools a:link,
+    ul.object-tools a:visited {
+        background-color: #dc3545 !important;
+        color: #ffffff !important;
+        border-radius: 0.375rem !important;
+        padding: 0.45rem 0.95rem !important;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        text-decoration: none !important;
+        display: inline-flex;
+        align-items: center;
+        background-image: none !important;
+    }
+
+    ul.object-tools a:hover {
+        background-color: #bb2d3b !important;
+    }
+
+    /* Mensagens de feedback do Admin */
+    ul.messagelist {
+        margin: 0 0 1.25rem 0 !important;
+        padding: 0 !important;
+    }
+
+    ul.messagelist li {
+        border-radius: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+        font-size: 0.9rem !important;
+    }
+
+    /* Changelist (Telas de Listagem: Pessoas, Objetivos, Liquidações) */
+    #changelist {
+        display: flex !important;
+        flex-direction: row-reverse;
+        align-items: flex-start;
+        gap: 1.25rem;
+        background: transparent !important;
+        border: none !important;
+        width: 100% !important;
+    }
+
+    #changelist .changelist-form-container {
+        flex: 1 1 auto;
+        min-width: 0;
+        background: #ffffff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+    }
+
+    #changelist-filter {
+        width: 250px !important;
+        flex-shrink: 0;
+        margin: 0 !important;
+        background: #ffffff !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.5rem !important;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+        overflow: hidden;
+    }
+
+    #changelist-filter h2 {
+        background: #212529 !important;
+        color: #ffffff !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.85rem !important;
+        font-weight: 700 !important;
+        margin: 0 !important;
+    }
+
+    #toolbar {
+        background: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.375rem !important;
+        padding: 0.65rem 0.85rem !important;
+        margin-bottom: 1rem !important;
+    }
+
+    #toolbar form input[type="text"] {
+        border: 1px solid #ced4da !important;
+        border-radius: 0.375rem !important;
+        padding: 0.35rem 0.65rem !important;
+        height: auto !important;
+    }
+
+    #toolbar form input[type="submit"] {
+        background: #212529 !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 0.375rem !important;
+        padding: 0.38rem 0.85rem !important;
+        font-weight: 600 !important;
+        cursor: pointer;
+    }
+
+    /* Tabelas do Admin */
+    #result_list {
+        width: 100% !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.375rem;
+        overflow: hidden;
+    }
+
+    #result_list thead th {
+        background: #f8f9fa !important;
+        color: #212529 !important;
+        border-bottom: 2px solid #dee2e6 !important;
+        padding: 0.65rem 0.75rem !important;
+        font-weight: 700 !important;
+        font-size: 0.8rem !important;
+    }
+
+    #result_list thead th a:link,
+    #result_list thead th a:visited {
+        color: #212529 !important;
+    }
+
+    #result_list tbody td,
+    #result_list tbody th {
+        padding: 0.65rem 0.75rem !important;
+        vertical-align: middle !important;
+        border-bottom: 1px solid #f1f3f5 !important;
+        font-size: 0.875rem !important;
+    }
+
+    /* Módulos e Formulários de Cadastro/Edição */
+    .module {
+        background: #ffffff !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.5rem !important;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+        margin-bottom: 1.25rem !important;
+        overflow: hidden;
+    }
+
+    .module h2, .module caption, .inline-group h2 {
+        background: #212529 !important;
+        color: #ffffff !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.9rem !important;
+        font-weight: 600 !important;
+        text-transform: none !important;
+    }
+
+    .module caption a.section:link,
+    .module caption a.section:visited {
+        color: #ffffff !important;
+        text-decoration: none !important;
+    }
+
+    .form-row {
+        padding: 0.85rem 1rem !important;
+        border-bottom: 1px solid #f1f3f5 !important;
+    }
+
+    input[type=text], input[type=password], input[type=email], input[type=url],
+    input[type=number], input[type=tel], textarea, select, .vTextField {
+        border: 1px solid #ced4da !important;
+        border-radius: 0.375rem !important;
+        padding: 0.4rem 0.65rem !important;
+    }
+
+    /* Widget filter_horizontal (Grupos e Departamentos da Pessoa) */
+    .selector {
+        width: 100% !important;
+        max-width: 850px;
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .selector-available, .selector-chosen {
+        width: 46% !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.375rem !important;
+        overflow: hidden;
+        background: #fff;
+    }
+
+    .selector-available h2, .selector-chosen h2 {
+        background: #495057 !important;
+        color: #ffffff !important;
+        font-size: 0.82rem !important;
+        padding: 0.5rem 0.75rem !important;
+        margin: 0 !important;
+    }
+
+    .selector-chosen h2 {
+        background: #212529 !important;
+    }
+
+    .selector select {
+        width: 100% !important;
+        border: none !important;
+        border-top: 1px solid #dee2e6 !important;
+        border-radius: 0 !important;
+    }
+
+    /* Barra de botões Salvar no rodapé dos formulários */
+    .submit-row {
+        background: #ffffff !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.5rem !important;
+        padding: 0.85rem 1.25rem !important;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+    }
+
+    .button, input[type=submit], input[type=button], .submit-row input, a.button {
+        border-radius: 0.375rem !important;
+        font-weight: 600 !important;
+        padding: 0.5rem 1rem !important;
+        border: none !important;
+        cursor: pointer;
+    }
+
+    /* Dashboard /admin/ index em largura total limpa */
+    .dashboard #content {
+        width: 100% !important;
+    }
+
+    #content-related {
+        background: #ffffff !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.5rem !important;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+    }
+
+    #content-related .module h2 {
+        background: #212529 !important;
+        color: #ffffff !important;
+    }
+
+    @media (max-width: 991.98px) {
+        .oci-layout {
+            flex-direction: column;
+        }
+        .oci-sidebar {
+            width: 100%;
+            min-height: auto;
+        }
+        #changelist {
+            flex-direction: column;
+        }
+        #changelist-filter {
+            width: 100% !important;
+        }
+    }
+</style>
+{% block blockbots %}<meta name="robots" content="NONE,NOARCHIVE">{% endblock %}
+</head>
+
+<body class="{% if is_popup %}popup {% endif %}{% block bodyclass %}{% endblock %}"
+  data-admin-utc-offset="{% now "Z" %}">
+
+{% if not is_popup %}
+<div class="oci-layout">
+    <!-- Sidebar idêntica ao Frontend -->
+    <aside class="oci-sidebar">
+        <div>
+            <!-- Brand / Logo -->
+            <a href="{% url 'home' %}" class="oci-brand">
+                <i class="bi bi-bank2 oci-brand-icon"></i>
+                <div>
+                    <span class="oci-brand-title">OCI Finance</span>
+                    <small class="oci-brand-subtitle">Pessoas & Controle Financeiro</small>
+                </div>
+            </a>
+            <hr class="oci-divider">
+
+            {% if user.is_authenticated %}
+                <div class="oci-login-box">
+                    <div class="oci-user-header">
+                        <div class="oci-avatar">
+                            {{ user.username|slice:":1"|upper }}
+                        </div>
+                        <div class="oci-user-info">
+                            <div class="oci-user-name">
+                                {% if user.person_profile %}
+                                    {{ user.person_profile.name }}
+                                {% else %}
+                                    {{ user.username }}
+                                {% endif %}
+                            </div>
+                            <small class="oci-user-handle">@{{ user.username }}</small>
+                        </div>
+                    </div>
+
+                    {% if perms.core.view_department or perms.core.add_department or perms.core.change_department or perms.core.delete_department %}
+                        {% if user.person_profile and user.person_profile.departments.exists %}
+                            <div class="oci-dept-box">
+                                <span class="oci-dept-label">Instâncias vinculadas:</span>
+                                <div class="oci-badge-list">
+                                    {% for dept in user.person_profile.departments.all %}
+                                        <span class="oci-badge" title="{{ dept.name }}">
+                                            {{ dept.code }}
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="oci-btn-logout">
+                            <i class="bi bi-box-arrow-right" style="margin-right: 0.35rem;"></i> Sair
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Menu Principal -->
+                <div class="oci-menu-label">Menu Principal</div>
+                <ul class="oci-nav">
+                    <li>
+                        <a href="{% url 'home' %}" class="oci-nav-link">
+                            <i class="bi bi-speedometer2"></i> Início / Painel
+                        </a>
+                    </li>
+
+                    {% if perms.core.view_department or perms.core.add_department or perms.core.change_department or perms.core.delete_department %}
+                    <li>
+                        <a href="{% url 'department_list' %}" class="oci-nav-link">
+                            <i class="bi bi-diagram-3"></i> Instâncias (Estrutura)
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if perms.core.view_person or perms.core.add_person or perms.core.change_person or perms.core.delete_person %}
+                    <li>
+                        <a href="{% url 'person_list' %}" class="oci-nav-link">
+                            <i class="bi bi-people"></i> Cadastro de Pessoas
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if perms.finance.view_financialobjective or perms.finance.add_financialobjective or perms.finance.change_financialobjective or perms.finance.delete_financialobjective %}
+                    <li>
+                        <a href="{% url 'objective_list' %}" class="oci-nav-link">
+                            <i class="bi bi-bullseye"></i> Objetivos Financeiros
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if perms.finance.view_objectivesettlement or perms.finance.add_objectivesettlement or perms.finance.change_objectivesettlement or perms.finance.delete_objectivesettlement %}
+                    <li>
+                        <a href="{% url 'settlement_list' %}" class="oci-nav-link">
+                            <i class="bi bi-cash-coin"></i> Liquidações / Pagamentos
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if user.is_superuser or perms.auth.view_group or perms.auth.change_group %}
+                    <li style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.15);">
+                        <a href="{% url 'system_admin' %}" class="oci-nav-link oci-admin-link">
+                            <i class="bi bi-gear"></i> Administração & Grupos
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            {% endif %}
+        </div>
+
+        <div class="oci-sidebar-footer">
+            <div>OCI Finance &copy; 2026</div>
+        </div>
+    </aside>
+
+    <!-- Conteúdo Principal -->
+    <div class="oci-main">
+{% endif %}
+
+<div id="container">
+    {% if not is_popup %}
+    {% block breadcrumbs %}
+    <div class="breadcrumbs">
+        <a href="{% url 'home' %}"><i class="bi bi-house-door"></i> {% translate 'Home' %}</a>
+        {% if title %} &rsaquo; {{ title }}{% endif %}
+    </div>
+    {% endblock %}
+    {% endif %}
+
+    <div class="main" id="main">
+        <div id="content-start" class="content" tabindex="-1">
+            {% block messages %}
+                {% if messages %}
+                    <ul class="messagelist">{% for message in messages %}
+                        <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message|capfirst }}</li>
+                    {% endfor %}</ul>
+                {% endif %}
+            {% endblock messages %}
+
+            <!-- Content -->
+            <div id="content" class="{% block coltype %}colM{% endblock %}">
+                {% block pretitle %}{% endblock %}
+                <div class="oci-admin-header">
+                    {% block content_title %}{% if title %}<h1>{{ title }}</h1>{% endif %}{% endblock %}
+                    {% block object-tools %}{% endblock %}
+                </div>
+                {% block content_subtitle %}{% if subtitle %}<h2>{{ subtitle }}</h2>{% endif %}{% endblock %}
+                {% block content %}
+                    {{ content }}
+                {% endblock %}
+                {% block sidebar %}{% endblock %}
+                <br class="clear">
+            </div>
+            <!-- END Content -->
+        </div>
+    </div>
+    {% block footer %}<div id="footer"></div>{% endblock %}
+</div>
+
+{% if not is_popup %}
+    </div>
+</div>
+{% endif %}
+
+<!-- SVGs nativos do Django Admin -->
+<svg xmlns="http://www.w3.org/2000/svg" class="base-svgs" style="display:none;">
+  <symbol viewBox="0 0 24 24" width="1rem" height="1rem" id="icon-auto"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2V4a8 8 0 1 0 0 16z"/></symbol>
+  <symbol viewBox="0 0 24 24" width="1rem" height="1rem" id="icon-moon"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 7a7 7 0 0 0 12 4.9v.1c0 5.523-4.477 10-10 10S2 17.523 2 12 6.477 2 12 2h.1A6.979 6.979 0 0 0 10 7zm-6 5a8 8 0 0 0 15.062 3.762A9 9 0 0 1 8.238 4.938 7.999 7.999 0 0 0 4 12z"/></symbol>
+  <symbol viewBox="0 0 24 24" width="1rem" height="1rem" id="icon-sun"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 18a6 6 0 1 1 0-12 6 6 0 0 1 0 12zm0-2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM11 1h2v3h-2V1zm0 19h2v3h-2v-3zM3.515 4.929l1.414-1.414L7.05 5.636 5.636 7.05 3.515 4.93zM16.95 18.364l1.414-1.414 2.121 2.121-1.414 1.414-2.121-2.121zm2.121-14.85l1.414 1.415-2.121 2.121-1.414-1.414 2.121-2.121zM5.636 16.95l1.414 1.414-2.121 2.121-1.414-1.414 2.121-2.121zM23 11v2h-3v-2h3zM4 11v2H1v-2h3z"/></symbol>
+</svg>
+</body>
+</html>

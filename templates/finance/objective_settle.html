@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+
+{% block title %}Registrar Pagamento Efetivo: {{ objective.title }} | OCI Finance{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            <i class="bi bi-cash-coin text-success me-2"></i>Liquidação / Pagamento Efetivo
+        </h2>
+        <p class="text-muted small mb-0">
+            Registre o valor efetivamente pago para <strong>{{ objective.title }}</strong> (podendo ser igual, inferior ou superior ao valor previsto).
+        </p>
+    </div>
+    <div>
+        <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Voltar para Objetivos
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Coluna Esquerda: Detalhes do Objetivo e Histórico de Pagamentos -->
+    <div class="col-12 col-xl-7">
+        <!-- Resumo do Objetivo -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-bullseye text-danger me-2"></i>Dados do Objetivo Financeiro
+                </h6>
+                {% if objective.is_settled %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>Quitado</span>
+                {% else %}
+                    <span class="badge bg-warning text-dark">Pendente</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row g-3 small">
+                    <div class="col-12 col-md-6">
+                        <span class="text-muted d-block">Descrição / Nome:</span>
+                        <span class="fw-bold text-dark fs-6">{{ objective.title }}</span>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <span class="text-muted d-block">Categoria / Tipo:</span>
+                        <span class="badge bg-dark">{{ objective.category.name }}</span>
+                        <span class="badge bg-secondary">{{ objective.get_frequency_display }}</span>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <span class="text-muted d-block">Instância:</span>
+                        <span class="fw-semibold text-dark">{{ objective.department.code }} — {{ objective.department.name }}</span>
+                        {% if objective.parent_objective %}
+                            <span class="badge bg-warning text-dark ms-1">Herdado de {{ objective.parent_objective.department.code }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <span class="text-muted d-block">Pessoa Vinculada:</span>
+                        <span class="fw-semibold text-dark">
+                            {% if objective.target_person %}
+                                {{ objective.target_person.name }}
+                            {% else %}
+                                Meta geral da instância
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    {% if objective.initial_edition or objective.final_edition %}
+                    <div class="col-12 col-md-6">
+                        <span class="text-muted d-block">Período da Assinatura:</span>
+                        <span class="fw-bold text-primary">Edição {{ objective.initial_edition }} até Edição {{ objective.final_edition }}</span>
+                    </div>
+                    {% endif %}
+
+                    {% if objective.target_quantity and objective.unit_price %}
+                    <div class="col-12 col-md-6">
+                        <span class="text-muted d-block">Meta de Quantidade por Edição:</span>
+                        <span class="fw-bold text-dark">
+                            {% if objective.edition_number %}{{ objective.edition_number }} • {% endif %}
+                            {{ objective.target_quantity }} un. × R$ {{ objective.unit_price|floatformat:2 }}
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <hr>
+
+                <!-- Comparativo Financeiro: Valor Objetivo vs Valor Efetivo Pago -->
+                <div class="row g-3 text-center">
+                    <div class="col-12 col-sm-4">
+                        <div class="p-3 bg-light rounded border">
+                            <div class="text-muted small text-uppercase fw-semibold">Valor do Objetivo</div>
+                            <div class="h5 fw-bold text-dark mb-0">R$ {{ objective.target_amount|floatformat:2 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <div class="p-3 bg-success bg-opacity-10 rounded border border-success border-opacity-25">
+                            <div class="text-success small text-uppercase fw-semibold">Total Efetivo Pago</div>
+                            <div class="h5 fw-bold text-success mb-0">R$ {{ objective.total_paid|floatformat:2 }}</div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <div class="p-3 bg-light rounded border">
+                            <div class="text-muted small text-uppercase fw-semibold">Diferença (Efetivo − Meta)</div>
+                            <div class="h5 fw-bold {% if objective.difference_amount > 0 %}text-primary{% elif objective.difference_amount < 0 %}text-danger{% else %}text-dark{% endif %} mb-0">
+                                {% if objective.difference_amount > 0 %}+{% endif %}R$ {{ objective.difference_amount|floatformat:2 }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Histórico de Pagamentos Efetivos deste Objetivo -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-clock-history text-primary me-2"></i>Pagamentos Efetivos Registrados ({{ settlements|length }})
+                </h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Valor Efetivo Pago</th>
+                            <th>Qtd Paga</th>
+                            <th>Recolhido por (Militante)</th>
+                            <th>Referência / Recibo</th>
+                            <th>Lançado por</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in settlements %}
+                        <tr>
+                            <td>{{ s.payment_date|date:"d/m/Y" }}</td>
+                            <td class="fw-bold text-success">R$ {{ s.amount_paid|floatformat:2 }}</td>
+                            <td>{{ s.quantity_paid|default:"—" }}</td>
+                            <td>{{ s.collected_by.name }}</td>
+                            <td>{{ s.receipt_reference|default:"—" }}</td>
+                            <td class="text-muted">@{{ s.registered_by.username }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                Nenhum pagamento registrado para este objetivo até o momento.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coluna Direita: Formulário de Registro de Pagamento Efetivo -->
+    <div class="col-12 col-xl-5">
+        {% if can_settle %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-success text-white py-3">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-cash-stack me-2"></i>Registrar Valor Efetivo do Pagamento
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="{{ form.amount_paid.id_for_label }}" class="form-label small fw-bold">
+                            Valor Efetivo Pago (R$) <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text fw-bold bg-success text-white">R$</span>
+                            {{ form.amount_paid }}
+                        </div>
+                        <div class="form-text small">
+                            Informe o valor real recebido — pode ser <strong>inferior, igual ou superior</strong> ao objetivo de R$ {{ objective.target_amount|floatformat:2 }}.
+                        </div>
+                    </div>
+
+                    {% if objective.target_quantity %}
+                    <div class="mb-3">
+                        <label for="{{ form.quantity_paid.id_for_label }}" class="form-label small fw-bold">
+                            Quantidade Efetiva Paga / Vendida (Opcional)
+                        </label>
+                        {{ form.quantity_paid }}
+                        <div class="form-text small">
+                            Meta prevista: {{ objective.target_quantity }} unidade(s) a R$ {{ objective.unit_price|floatformat:2 }}.
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.payment_date.id_for_label }}" class="form-label small fw-bold">
+                                Data do Pagamento <span class="text-danger">*</span>
+                            </label>
+                            {{ form.payment_date }}
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.receipt_reference.id_for_label }}" class="form-label small fw-bold">
+                                Comprovante / Referência
+                            </label>
+                            {{ form.receipt_reference }}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.collected_by.id_for_label }}" class="form-label small fw-bold">
+                            Centralizado / Recolhido por (Militante) <span class="text-danger">*</span>
+                        </label>
+                        {{ form.collected_by }}
+                    </div>
+
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="form-check form-switch">
+                            {{ form.mark_as_settled }}
+                            <label class="form-check-label fw-bold text-dark small" for="{{ form.mark_as_settled.id_for_label }}">
+                                Marcar este objetivo como Quitado / Concluído
+                            </label>
+                        </div>
+                        <div class="small text-muted mt-1">
+                            Mantenha marcado para dar baixa definitiva no objetivo (mesmo que o valor efetivo tenha sido menor que o previsto). Desmarque apenas se for um adiantamento parcial e ainda faltar receber o restante.
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success fw-semibold py-2">
+                            <i class="bi bi-check2-circle me-1"></i> Confirmar Pagamento Efetivo
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-secondary">
+            <i class="bi bi-lock me-1"></i> Você possui permissão apenas de visualização nesta instância.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+
+{% block title %}Início | OCI Finance{% endblock %}
+
+{% block content %}
+{% if user.is_authenticated %}
+    <!-- Cabeçalho do Painel -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h2 class="h4 fw-bold mb-1">Painel de Controle</h2>
+            <p class="text-muted small mb-0">
+                {% if can_access_departments %}
+                    Visão consolidada do seu escopo hierárquico ({{ accessible_departments_count }} instância{{ accessible_departments_count|pluralize:"s" }} acessível{{ accessible_departments_count|pluralize:"is" }}).
+                {% else %}
+                    Visão consolidada dos módulos liberados para o seu perfil de acesso.
+                {% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2 mt-2 mt-sm-0">
+            {% if perms.core.add_department %}
+            <a href="{% url 'department_list' %}" class="btn btn-sm btn-outline-dark">
+                <i class="bi bi-diagram-3 me-1"></i> Gerenciar Instâncias
+            </a>
+            {% endif %}
+            {% if perms.core.add_person %}
+            <a href="{% url 'person_create' %}" class="btn btn-sm btn-primary">
+                <i class="bi bi-person-plus me-1"></i> Nova Pessoa
+            </a>
+            {% endif %}
+            {% if perms.finance.add_financialobjective %}
+            <a href="{% url 'objective_create' %}" class="btn btn-sm btn-success">
+                <i class="bi bi-plus-circle me-1"></i> Novo Objetivo Financeiro
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Cards de Resumo (apenas dos módulos que o usuário tem permissão) -->
+    {% if can_access_people or can_access_finance %}
+    <div class="row g-3 mb-4">
+        {% if can_access_people %}
+        <div class="col-12 col-sm-6 {% if can_access_finance %}col-xl-3{% else %}col-xl-6{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small fw-semibold text-uppercase">Total de Pessoas</span>
+                        <span class="bg-primary bg-opacity-10 text-primary p-2 rounded">
+                            <i class="bi bi-people-fill fs-5"></i>
+                        </span>
+                    </div>
+                    <h3 class="fw-bold mb-1">{{ total_people_count }}</h3>
+                    <div class="small text-muted">
+                        <span class="me-2"><i class="bi bi-person-badge text-danger"></i> {{ militantes_count }} Militantes</span>
+                        <span class="me-2">• {{ contribuintes_count }} Contrib.</span>
+                        <span>• {{ contatos_count }} Contatos</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if can_access_finance %}
+        <div class="col-12 col-sm-6 {% if can_access_people %}col-xl-3{% else %}col-xl-4{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small fw-semibold text-uppercase">Total Previsto</span>
+                        <span class="bg-info bg-opacity-10 text-info p-2 rounded">
+                            <i class="bi bi-bullseye fs-5"></i>
+                        </span>
+                    </div>
+                    <h3 class="fw-bold mb-1">R$ {{ total_expected|floatformat:2 }}</h3>
+                    <div class="small text-muted">
+                        Soma das metas financeiras
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 {% if can_access_people %}col-xl-3{% else %}col-xl-4{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small fw-semibold text-uppercase">Total Arrecadado</span>
+                        <span class="bg-success bg-opacity-10 text-success p-2 rounded">
+                            <i class="bi bi-cash-stack fs-5"></i>
+                        </span>
+                    </div>
+                    <h3 class="fw-bold text-success mb-1">R$ {{ total_collected|floatformat:2 }}</h3>
+                    <div class="small text-muted">
+                        Pagamentos liquidados registrados
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 {% if can_access_people %}col-xl-3{% else %}col-xl-4{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small fw-semibold text-uppercase">Status de Objetivos</span>
+                        <span class="bg-warning bg-opacity-10 text-warning p-2 rounded">
+                            <i class="bi bi-clipboard-check fs-5"></i>
+                        </span>
+                    </div>
+                    <h3 class="fw-bold mb-1">{{ pending_objectives_count }} <small class="fs-6 fw-normal text-muted">pendentes</small></h3>
+                    <div class="small text-success">
+                        <i class="bi bi-check-circle-fill me-1"></i> {{ settled_objectives_count }} objetivo{{ settled_objectives_count|pluralize:"s" }} quitado{{ settled_objectives_count|pluralize:"s" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Tabelas Rápidas: exibidas apenas se o usuário tiver permissão no respectivo módulo -->
+    <div class="row g-4">
+        {% if can_access_people %}
+        <!-- Últimas Pessoas Cadastradas -->
+        <div class="col-12 {% if can_access_finance %}col-lg-6{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-person-lines-fill text-primary me-2"></i>Pessoas Cadastradas
+                    </h6>
+                    <a href="{% url 'person_list' %}" class="btn btn-sm btn-outline-secondary">Ver todas</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small">
+                            <tr>
+                                <th>Nome</th>
+                                <th>Grupos / Perfis</th>
+                                {% if can_access_departments %}
+                                <th>Instância</th>
+                                {% endif %}
+                                <th>Responsável</th>
+                            </tr>
+                        </thead>
+                        <tbody class="small">
+                            {% for person in recent_people %}
+                            <tr>
+                                <td class="fw-semibold">{{ person.name }}</td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        {% for g in person.groups.all %}
+                                            {% if '03' in g.name %}
+                                                <span class="badge bg-danger">{{ g.name }}</span>
+                                            {% elif '04' in g.name %}
+                                                <span class="badge bg-primary">{{ g.name }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ g.name }}</span>
+                                            {% endif %}
+                                        {% empty %}
+                                            <span class="text-muted">—</span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                                {% if can_access_departments %}
+                                <td>
+                                    {% for link in person.department_links.all %}
+                                        <span class="badge bg-light text-dark border">{{ link.department.code }}</span>
+                                    {% empty %}
+                                        <span class="text-muted">—</span>
+                                    {% endfor %}
+                                </td>
+                                {% endif %}
+                                <td class="text-muted">{{ person.responsible_militant.name|default:"—" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="{% if can_access_departments %}4{% else %}3{% endif %}" class="text-center text-muted py-4">Nenhuma pessoa encontrada.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if can_access_finance %}
+        <!-- Objetivos Financeiros -->
+        <div class="col-12 {% if can_access_people %}col-lg-6{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-wallet2 text-success me-2"></i>Objetivos Financeiros Recentes
+                    </h6>
+                    <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-secondary">Ver todos</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small">
+                            <tr>
+                                <th>Objetivo</th>
+                                <th>Pessoa</th>
+                                <th>Valor</th>
+                                <th>Vencimento</th>
+                                <th>Situação</th>
+                            </tr>
+                        </thead>
+                        <tbody class="small">
+                            {% for obj in recent_objectives %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ obj.title }}</div>
+                                    <small class="text-muted">
+                                        {{ obj.category.name }}{% if can_access_departments %} • {{ obj.department.code }}{% endif %}
+                                    </small>
+                                </td>
+                                <td>{{ obj.target_person.name }}</td>
+                                <td class="fw-semibold">R$ {{ obj.target_amount|floatformat:2 }}</td>
+                                <td>{{ obj.due_date|date:"d/m/Y" }}</td>
+                                <td>
+                                    {% if obj.is_settled %}
+                                        <span class="badge bg-success"><i class="bi bi-check-lg me-1"></i>Quitado</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Pendente</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">Nenhum objetivo financeiro lançado.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if not can_access_people and not can_access_finance and not can_access_departments %}
+        <div class="col-12">
+            <div class="alert alert-warning shadow-sm">
+                <i class="bi bi-exclamation-circle-fill me-2"></i>
+                Sua conta ainda não possui perfis de permissão atribuídos. Solicite ao administrador a inclusão do seu perfil de acesso.
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+{% else %}
+    <!-- Tela Inicial para Visitante Não Autenticado -->
+    <div class="py-4">
+        <div class="p-5 mb-4 bg-white rounded-3 shadow-sm border">
+            <div class="container-fluid py-2">
+                <span class="badge bg-danger mb-2">Sistema de Gestão Interna</span>
+                <h1 class="display-6 fw-bold">OCI Finance — Cadastro de Pessoas & Controle Financeiro</h1>
+                <p class="col-md-9 fs-6 text-muted mt-3">
+                    Gerencie o cadastro unificado de <strong>Militantes, Contribuintes e Contatos</strong> e acompanhe o cumprimento de objetivos financeiros e liquidações.
+                </p>
+                <div class="alert alert-secondary d-inline-flex align-items-center mt-2 mb-0" role="alert">
+                    <i class="bi bi-arrow-left-circle-fill text-danger fs-5 me-2"></i>
+                    <div>
+                        Utilize o <strong>formulário de login na barra lateral esquerda</strong> para acessar o painel.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-primary mb-2"><i class="bi bi-people-fill fs-3"></i></div>
+                        <h5 class="card-title fw-bold">Gestão de Pessoas</h5>
+                        <p class="card-text text-muted small">
+                            Cadastro completo de Militantes, Contribuintes e Contatos, com vínculo de acompanhamento por militante responsável e perfis de acesso.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="text-success mb-2"><i class="bi bi-cash-coin fs-3"></i></div>
+                        <h5 class="card-title fw-bold">Objetivos e Liquidações</h5>
+                        <p class="card-text text-muted small">
+                            Lançamento de metas financeiras pontuais ou recorrentes mensais (contribuições, jornais, rifas, cotas) e baixa automática na liquidação.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

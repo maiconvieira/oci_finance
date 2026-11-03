@@ -1,0 +1,938 @@
+{% extends 'base.html' %}
+
+{% block title %}Liquidação de Pagamentos | OCI Finance{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            <i class="bi bi-cash-coin text-success me-2"></i>Liquidação de Pagamentos
+        </h2>
+        <p class="text-muted small mb-0">
+            Selecione a célula e a pessoa, anexe o comprovante (PDF, Imagem ou TXT) e liquide os objetivos em aberto da célula, do militante e de seus contribuintes.
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'objective_list' %}" class="btn btn-sm btn-outline-dark">
+            <i class="bi bi-bullseye me-1"></i> Ver Objetivos Financeiros
+        </a>
+    </div>
+</div>
+
+{% if can_register_settlement %}
+<!-- Painel Principal de Liquidação de Pagamento -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-dark text-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h6 class="m-0 fw-bold">
+            <i class="bi bi-receipt-cutoff text-success me-2"></i>Nova Liquidação de Pagamento
+        </h6>
+        <span class="badge bg-success">
+            <i class="bi bi-check2-all me-1"></i>Célula + Militante + Contribuintes sob responsabilidade
+        </span>
+    </div>
+    <div class="card-body p-4">
+        <form method="post"
+              action="{% url 'settlement_list' %}"
+              enctype="multipart/form-data"
+              id="settlementBatchForm"
+              data-people-by-cell="{{ people_by_cell_json|escape }}"
+              data-open-objectives="{{ open_objectives_json|escape }}"
+              data-parse-url="{% url 'parse_receipt' %}"
+              novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="settlement_batch_submit" value="1">
+
+            <!-- ETAPA 1: Selecionar a Célula e a Pessoa -->
+            <div class="p-3 bg-light rounded border mb-4">
+                <div class="fw-bold text-dark small mb-3 text-uppercase d-flex align-items-center">
+                    <span class="badge bg-danger me-2">1</span> Selecionar a Célula e a Pessoa (Militante)
+                </div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label for="selectCellId" class="form-label small fw-bold">
+                            Célula (d5) <span class="text-danger">*</span>
+                        </label>
+                        <select name="selected_cell_id" id="selectCellId" class="form-select" required>
+                            <option value="">Selecione a célula...</option>
+                            {% for cell in cell_departments %}
+                                <option value="{{ cell.id }}" {% if form_state.selected_cell_id == cell.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ cell.code }} — {{ cell.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text small">
+                            Selecione a célula (d5) onde os pagamentos estão sendo realizados.
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label for="selectPersonId" class="form-label small fw-bold">
+                            Pessoa / Militante <span class="text-danger">*</span>
+                        </label>
+                        <select name="selected_person_id"
+                                id="selectPersonId"
+                                class="form-select"
+                                data-initial-person="{{ form_state.selected_person_id }}"
+                                required>
+                            <option value="">Selecione primeiro a célula...</option>
+                        </select>
+                        <div class="form-text small" id="selectedPersonHelper">
+                            Lista apenas as pessoas vinculadas à célula escolhida (e carrega também os contribuintes sob responsabilidade do militante).
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETAPA 2: Comprovante de Pagamento e Dados Capturados -->
+            <div class="p-3 bg-light rounded border mb-4" id="step2ReceiptBox">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                    <div class="fw-bold text-dark small text-uppercase d-flex align-items-center">
+                        <span class="badge bg-danger me-2">2</span> Comprovante de Pagamento (PDF, Imagem ou TXT) & Dados do Pagamento
+                    </div>
+                    <div id="receiptReadStatusBadge" class="small"></div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-12 col-lg-8">
+                        <label for="receiptFileInput" class="form-label small fw-bold">
+                            Inserir Comprovante de Pagamento (PDF, IMAGEM ou TXT) <span class="text-danger">*</span>
+                        </label>
+                        <input type="file"
+                               name="receipt_file"
+                               id="receiptFileInput"
+                               class="form-control"
+                               accept=".pdf,.txt,image/*,.png,.jpg,.jpeg,.webp,.bmp"
+                               required>
+                        <div class="form-text small">
+                            Formatos aceitos: <strong>PDF</strong>, <strong>IMAGEM</strong> (PNG, JPG, WEBP) ou <strong>TXT</strong>. O sistema tentará ler automaticamente dia/hora, responsável, conta e valor; caso não seja possível capturar algum campo, preencha manualmente abaixo.
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <label for="inputReceiptReference" class="form-label small fw-bold">
+                            Identificador / Autenticação (Opcional)
+                        </label>
+                        <input type="text"
+                               name="receipt_reference"
+                               id="inputReceiptReference"
+                               value="{{ form_state.receipt_reference }}"
+                               class="form-control"
+                               placeholder="Ex: ID Transação Pix, Recibo nº...">
+                    </div>
+                </div>
+
+                <!-- Alerta dinâmico do leitor de comprovante -->
+                <div id="receiptParserAlert" class="alert d-none py-2 px-3 small mb-3" role="alert"></div>
+
+                <!-- Campos extraídos do comprovante (editáveis e obrigatórios caso não capturados) -->
+                <div class="row g-3">
+                    <div class="col-6 col-md-3">
+                        <label for="inputPaymentDate" class="form-label small fw-bold">
+                            Dia do Pagamento <span class="text-danger">*</span>
+                        </label>
+                        <input type="date"
+                               name="payment_date"
+                               id="inputPaymentDate"
+                               value="{{ form_state.payment_date }}"
+                               class="form-control"
+                               required>
+                    </div>
+
+                    <div class="col-6 col-md-2">
+                        <label for="inputPaymentTime" class="form-label small fw-bold">
+                            Hora do Pagamento <span class="text-danger">*</span>
+                        </label>
+                        <input type="time"
+                               name="payment_time"
+                               id="inputPaymentTime"
+                               value="{{ form_state.payment_time }}"
+                               class="form-control"
+                               required>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="inputPayerName" class="form-label small fw-bold mb-1">
+                                Nome do Responsável pelo Pagamento <span class="text-danger">*</span>
+                            </label>
+                            <button type="button"
+                                    id="btnUseSelectedPersonName"
+                                    class="btn btn-link btn-sm p-0 text-decoration-none"
+                                    style="font-size: 0.75rem;">
+                                Usar pessoa selecionada
+                            </button>
+                        </div>
+                        <input type="text"
+                               name="payer_name"
+                               id="inputPayerName"
+                               value="{{ form_state.payer_name }}"
+                               class="form-control"
+                               placeholder="Nome completo do pagador no comprovante"
+                               required>
+                    </div>
+
+                    <div class="col-12 col-md-3">
+                        <label for="inputPayerAccount" class="form-label small fw-bold">
+                            Conta que realizou o Pagamento <span class="text-danger">*</span>
+                        </label>
+                        <input type="text"
+                               name="payer_account"
+                               id="inputPayerAccount"
+                               value="{{ form_state.payer_account }}"
+                               class="form-control"
+                               placeholder="Ex: Nubank / Ag 0001 Cc 12345-6"
+                               required>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label for="inputReceiptTotalAmount" class="form-label small fw-bold">
+                            Valor do Comprovante (R$) <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text fw-bold bg-success text-white">R$</span>
+                            <input type="number"
+                                   step="0.01"
+                                   min="0.01"
+                                   name="receipt_total_amount"
+                                   id="inputReceiptTotalAmount"
+                                   value="{{ form_state.receipt_total_amount }}"
+                                   class="form-control fw-bold text-success"
+                                   placeholder="0,00"
+                                   required>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ETAPA 3: Objetivos em Aberto da Célula, do Militante e dos Contribuintes sob responsabilidade -->
+            <div class="p-3 bg-light rounded border mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                    <div class="fw-bold text-dark small text-uppercase d-flex align-items-center">
+                        <span class="badge bg-danger me-2">3</span> Objetivos em Aberto (Célula, Militante & Contribuintes sob Responsabilidade)
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-3 small">
+                        <span class="px-2 py-1 rounded bg-white border">
+                            Valor Comprovante: <strong class="text-dark" id="summaryReceiptVal">R$ 0,00</strong>
+                        </span>
+                        <span class="px-2 py-1 rounded bg-white border">
+                            Total Distribuído nos Objetivos: <strong class="text-success" id="summaryAllocatedVal">R$ 0,00</strong>
+                        </span>
+                        <span class="px-2 py-1 rounded bg-white border">
+                            Saldo do Comprovante: <strong id="summaryDiffVal" class="text-muted">R$ 0,00</strong>
+                        </span>
+                    </div>
+                </div>
+
+                <div id="openObjectivesEmptyState" class="text-center text-muted py-4 bg-white rounded border">
+                    <i class="bi bi-arrow-up-circle fs-3 d-block mb-1 text-secondary"></i>
+                    Selecione a <strong>Célula</strong> e a <strong>Pessoa / Militante</strong> acima para listar os objetivos em aberto da célula, do militante e dos contribuintes sob sua responsabilidade.
+                </div>
+
+                <div id="openObjectivesTableWrapper" class="table-responsive d-none bg-white rounded border">
+                    <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Vínculo / Titular</th>
+                                <th>Objetivo / Receita</th>
+                                <th>Ciclo / Venc.</th>
+                                <th class="text-end">Meta & Saldo Aberto</th>
+                                <th style="width: 145px;">Qtd Paga (Fracionada)</th>
+                                <th style="width: 190px;">Valor Pago (R$)</th>
+                                <th class="text-center" style="width: 140px;">Tag Liquidado</th>
+                                <th style="width: 220px;">Observações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="openObjectivesTbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-success fw-semibold px-4 py-2">
+                    <i class="bi bi-check2-circle me-1"></i> Confirmar Liquidação de Pagamento
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- Resumo + Filtros do Histórico -->
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
+            <div class="card-body py-3">
+                <div class="text-muted small fw-semibold text-uppercase">Total Efetivamente Arrecadado</div>
+                <div class="h4 fw-bold text-success mb-0">R$ {{ total_paid_sum|floatformat:2 }}</div>
+                <small class="text-muted">{{ settlements|length }} pagamento{{ settlements|length|pluralize:"s" }} listado{{ settlements|length|pluralize:"s" }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-md-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+                <form method="get" action="{% url 'settlement_list' %}" class="row g-2 align-items-end">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small fw-bold text-muted mb-1">Buscar no Histórico</label>
+                        <input type="text" name="q" value="{{ search_query }}" class="form-control form-control-sm" placeholder="Objetivo, pessoa, pagador, conta, obs...">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold text-muted mb-1">Mês do Pagamento</label>
+                        <input type="month" name="mes" value="{{ month_filter }}" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small fw-bold text-muted mb-1">Instância (+ Filhas)</label>
+                        <select name="department" class="form-select form-select-sm">
+                            <option value="">Todas no meu escopo</option>
+                            {% for item in cascade_depts %}
+                                <option value="{{ item.department.id }}" {% if dept_filter == item.department.id %}selected{% endif %}>
+                                    {{ item.level_tag|upper }} • {{ item.path_display }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2 d-flex gap-1">
+                        <button type="submit" class="btn btn-sm btn-dark w-100">Filtrar</button>
+                        <a href="{% url 'settlement_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabela de Histórico de Liquidações Realizadas -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3">
+        <h6 class="m-0 fw-bold">
+            <i class="bi bi-clock-history text-success me-2"></i>Histórico de Liquidações Registradas
+        </h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 small">
+            <thead class="table-light">
+                <tr>
+                    <th>Dia & Hora Pagto</th>
+                    <th>Objetivo / Receita</th>
+                    <th>Célula & Titular</th>
+                    <th>Pagador & Conta (Comprovante)</th>
+                    <th class="text-end">Qtd / Valor Pago</th>
+                    <th class="text-center">Status Objetivo</th>
+                    <th>Observações</th>
+                    <th class="text-center">Arquivo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in settlements %}
+                <tr>
+                    <td>
+                        <div class="fw-semibold text-dark">{{ s.payment_date|date:"d/m/Y" }}</div>
+                        {% if s.payment_time %}
+                            <div class="text-muted" style="font-size: 0.75rem;">
+                                <i class="bi bi-clock me-1"></i>{{ s.payment_time|time:"H:i" }}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="fw-bold text-dark">{{ s.objective.title }}</div>
+                        <div>
+                            <span class="badge bg-dark">{{ s.objective.category.name }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border">{{ s.objective.department.code }}</span>
+                        {% if s.objective.target_person %}
+                            <div class="mt-1 fw-semibold text-dark">{{ s.objective.target_person.name }}</div>
+                            {% if s.objective.target_person.responsible_militant %}
+                                <div class="text-muted" style="font-size: 0.72rem;">
+                                    Resp: {{ s.objective.target_person.responsible_militant.name }}
+                                </div>
+                            {% endif %}
+                        {% else %}
+                            <div class="mt-1 text-muted fst-italic">Meta da Célula</div>
+                        {% endif %}
+                        <div class="text-muted" style="font-size: 0.72rem;">
+                            Militante: {{ s.collected_by.name }}
+                        </div>
+                    </td>
+                    <td>
+                        {% if s.payer_name %}
+                            <div class="fw-semibold text-dark">{{ s.payer_name }}</div>
+                        {% endif %}
+                        {% if s.payer_account %}
+                            <div class="text-muted" style="font-size: 0.75rem;">{{ s.payer_account }}</div>
+                        {% endif %}
+                        {% if s.receipt_total_amount %}
+                            <div class="text-secondary" style="font-size: 0.72rem;">
+                                Total Comprovante: R$ {{ s.receipt_total_amount|floatformat:2 }}
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="fw-bold text-success">R$ {{ s.amount_paid|floatformat:2 }}</div>
+                        {% if s.quantity_paid %}
+                            <span class="badge bg-light text-dark border">{{ s.quantity_paid }} un.</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if s.objective.is_settled %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>Liquidado</span>
+                        {% else %}
+                            <span class="badge bg-info text-dark">Parcial</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ s.notes|default:"—" }}</td>
+                    <td class="text-center">
+                        <div class="d-inline-flex align-items-center justify-content-center gap-1">
+                            {% if s.receipt_file %}
+                                <a href="{{ s.receipt_file.url }}"
+                                   target="_blank"
+                                   class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                   style="width: 32px; height: 32px;"
+                                   title="Abrir comprovante anexado">
+                                    <i class="bi bi-file-earmark-arrow-down"></i>
+                                </a>
+                            {% endif %}
+                            {% if 'https://drive.google.com' in s.receipt_reference %}
+                                <a href="{{ s.receipt_reference }}"
+                                   target="_blank"
+                                   class="btn btn-sm btn-outline-success d-inline-flex align-items-center justify-content-center"
+                                   style="width: 32px; height: 32px;"
+                                   title="Abrir comprovante no Google Drive">
+                                    <i class="bi bi-google"></i>
+                                </a>
+                            {% endif %}
+                            {% if not s.receipt_file and 'https://drive.google.com' not in s.receipt_reference %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-5">
+                        Nenhuma liquidação encontrada para os filtros selecionados.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- PDF.js e Tesseract.js via CDN para leitura auxiliar de PDF e OCR de Imagem no navegador -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const formEl = document.getElementById('settlementBatchForm');
+    if (!formEl) return;
+
+    const peopleByCell = JSON.parse(formEl.getAttribute('data-people-by-cell') || '{}');
+    const openObjectives = JSON.parse(formEl.getAttribute('data-open-objectives') || '[]');
+    const parseUrl = formEl.getAttribute('data-parse-url');
+    const csrfToken = formEl.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    const selectCell = document.getElementById('selectCellId');
+    const selectPerson = document.getElementById('selectPersonId');
+    const personHelper = document.getElementById('selectedPersonHelper');
+
+    const receiptInput = document.getElementById('receiptFileInput');
+    const receiptStatusBadge = document.getElementById('receiptReadStatusBadge');
+    const receiptAlert = document.getElementById('receiptParserAlert');
+
+    const inputDate = document.getElementById('inputPaymentDate');
+    const inputTime = document.getElementById('inputPaymentTime');
+    const inputPayerName = document.getElementById('inputPayerName');
+    const inputPayerAccount = document.getElementById('inputPayerAccount');
+    const inputReceiptAmount = document.getElementById('inputReceiptTotalAmount');
+    const btnUseSelectedPersonName = document.getElementById('btnUseSelectedPersonName');
+
+    const emptyStateEl = document.getElementById('openObjectivesEmptyState');
+    const tableWrapperEl = document.getElementById('openObjectivesTableWrapper');
+    const tbodyEl = document.getElementById('openObjectivesTbody');
+
+    const summaryReceiptVal = document.getElementById('summaryReceiptVal');
+    const summaryAllocatedVal = document.getElementById('summaryAllocatedVal');
+    const summaryDiffVal = document.getElementById('summaryDiffVal');
+
+    let initialPersonId = selectPerson.getAttribute('data-initial-person') || '';
+
+    function formatBRL(num) {
+        const val = isNaN(num) ? 0 : Number(num);
+        return 'R$ ' + val.toFixed(2).replace('.', ',');
+    }
+
+    function populatePeopleForCell(cellId, preservePersonId) {
+        selectPerson.innerHTML = '';
+        if (!cellId) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Selecione primeiro a célula...';
+            selectPerson.appendChild(opt);
+            renderOpenObjectivesTable();
+            return;
+        }
+
+        const list = peopleByCell[String(cellId)] || [];
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = list.length > 0
+            ? 'Selecione a pessoa / militante da célula...'
+            : 'Nenhuma pessoa ativa vinculada a esta célula';
+        selectPerson.appendChild(defaultOpt);
+
+        list.forEach(function (p) {
+            const opt = document.createElement('option');
+            opt.value = String(p.id);
+            let label = p.name;
+            if (p.is_militant) {
+                label += ' (Militante';
+                if (p.dependents && p.dependents.length > 0) {
+                    label += ' • ' + p.dependents.length + ' contribuinte(s)';
+                }
+                label += ')';
+            }
+            opt.textContent = label;
+            if (preservePersonId && String(preservePersonId) === String(p.id)) {
+                opt.selected = true;
+            }
+            selectPerson.appendChild(opt);
+        });
+
+        // Se só houver 1 pessoa na célula e nenhuma selecionada, pré-seleciona
+        if (!selectPerson.value && list.length === 1) {
+            selectPerson.value = String(list[0].id);
+        }
+
+        updatePersonHelperText();
+        renderOpenObjectivesTable();
+    }
+
+    function updatePersonHelperText() {
+        const cellId = selectCell.value;
+        const personId = selectPerson.value;
+        if (!cellId || !personId) {
+            personHelper.textContent = 'Lista apenas as pessoas vinculadas à célula escolhida (e carrega também os contribuintes sob responsabilidade do militante).';
+            return;
+        }
+        const list = peopleByCell[String(cellId)] || [];
+        const found = list.find(function (p) { return String(p.id) === String(personId); });
+        if (found && found.dependents && found.dependents.length > 0) {
+            const depNames = found.dependents.map(function (d) { return d.name; }).join(', ');
+            personHelper.innerHTML = '<i class="bi bi-people-fill text-primary me-1"></i>Contribuintes sob responsabilidade de <strong>' + found.name + '</strong>: ' + depNames;
+        } else {
+            personHelper.textContent = 'Exibindo objetivos em aberto da célula e da pessoa selecionada.';
+        }
+    }
+
+    function renderOpenObjectivesTable() {
+        const cellId = selectCell.value ? parseInt(selectCell.value, 10) : null;
+        const personId = selectPerson.value ? parseInt(selectPerson.value, 10) : null;
+
+        tbodyEl.innerHTML = '';
+
+        if (!cellId || !personId) {
+            emptyStateEl.classList.remove('d-none');
+            tableWrapperEl.classList.add('d-none');
+            emptyStateEl.innerHTML = '<i class="bi bi-arrow-up-circle fs-3 d-block mb-1 text-secondary"></i>Selecione a <strong>Célula</strong> e a <strong>Pessoa / Militante</strong> acima para listar os objetivos em aberto da célula, do militante e dos contribuintes sob sua responsabilidade.';
+            updateTotalsSummary();
+            return;
+        }
+
+        // Filtra objetivos em aberto:
+        // 1. Da Célula selecionada (sem pessoa específica)
+        // 2. Do Militante / Pessoa selecionada na célula
+        // 3. Dos Contribuintes sob responsabilidade do Militante selecionado
+        const filtered = openObjectives.filter(function (obj) {
+            const isSameCellGeneral = (obj.department_id === cellId && !obj.target_person_id);
+            const isSelectedPerson = (obj.department_id === cellId && obj.target_person_id === personId);
+            const isDependentContributor = (obj.responsible_militant_id === personId && obj.department_id === cellId)
+                || (obj.responsible_militant_id === personId);
+            return isSameCellGeneral || isSelectedPerson || isDependentContributor;
+        });
+
+        if (filtered.length === 0) {
+            emptyStateEl.classList.remove('d-none');
+            tableWrapperEl.classList.add('d-none');
+            emptyStateEl.innerHTML = '<i class="bi bi-check2-circle fs-3 d-block mb-1 text-success"></i>Nenhum objetivo em aberto encontrado para esta Célula, Militante ou Contribuintes sob sua responsabilidade!';
+            updateTotalsSummary();
+            return;
+        }
+
+        emptyStateEl.classList.add('d-none');
+        tableWrapperEl.classList.remove('d-none');
+
+        filtered.forEach(function (obj) {
+            const tr = document.createElement('tr');
+            const remAmount = parseFloat(obj.remaining_amount || obj.target_amount || '0');
+            const unitPrice = obj.unit_price ? parseFloat(obj.unit_price) : null;
+
+            // Define o badge de vínculo (Célula, Militante ou Contribuinte)
+            let ownerBadgeHtml = '';
+            if (!obj.target_person_id) {
+                ownerBadgeHtml = '<span class="badge bg-dark">Meta da Célula</span><div class="fw-semibold text-dark mt-1">' + obj.department_code + '</div>';
+            } else if (obj.target_person_id === personId) {
+                ownerBadgeHtml = '<span class="badge bg-danger">Militante</span><div class="fw-bold text-dark mt-1">' + obj.target_person_name + '</div>';
+            } else {
+                ownerBadgeHtml = '<span class="badge bg-primary">Contribuinte</span><div class="fw-bold text-dark mt-1">' + obj.target_person_name + '</div><div class="text-muted" style="font-size: 0.72rem;">Resp: ' + obj.responsible_militant_name + '</div>';
+            }
+
+            // Detalhes de quantidade / edições
+            let qtyMetaHtml = '';
+            if (obj.target_quantity) {
+                qtyMetaHtml = '<div class="text-muted" style="font-size: 0.75rem;">Meta: ' + obj.target_quantity + ' un.';
+                if (unitPrice) {
+                    qtyMetaHtml += ' × R$ ' + unitPrice.toFixed(2).replace('.', ',');
+                }
+                if (obj.remaining_quantity !== null && obj.remaining_quantity !== undefined) {
+                    qtyMetaHtml += ' (Restam <strong>' + obj.remaining_quantity + ' un.</strong>)';
+                }
+                qtyMetaHtml += '</div>';
+            }
+
+            const paidValFloat = parseFloat(obj.total_paid || '0');
+            const paidInfoHtml = paidValFloat > 0
+                ? '<div class="text-success" style="font-size: 0.73rem;">Já pago: R$ ' + paidValFloat.toFixed(2).replace('.', ',') + '</div>'
+                : '';
+
+            tr.innerHTML = ''
+                + '<td>'
+                + '  <input type="hidden" name="objective_ids" value="' + obj.id + '">'
+                +    ownerBadgeHtml
+                + '</td>'
+                + '<td>'
+                + '  <div class="fw-bold text-dark">' + obj.title + '</div>'
+                + '  <span class="badge bg-secondary">' + obj.category_name + '</span> '
+                + '  <span class="badge bg-light text-dark border">' + obj.frequency_display + '</span>'
+                +    qtyMetaHtml
+                + '</td>'
+                + '<td>'
+                +    (obj.reference_month ? '<div class="fw-semibold text-dark">' + obj.reference_month + '</div>' : '')
+                + '  <div class="text-muted" style="font-size: 0.75rem;">Venc: ' + obj.due_date + '</div>'
+                + '</td>'
+                + '<td class="text-end">'
+                + '  <div class="text-muted" style="font-size: 0.75rem;">Total: R$ ' + parseFloat(obj.target_amount).toFixed(2).replace('.', ',') + '</div>'
+                +    paidInfoHtml
+                + '  <div class="fw-bold text-danger">Aberto: R$ ' + remAmount.toFixed(2).replace('.', ',') + '</div>'
+                + '</td>'
+                + '<td>'
+                + '  <input type="number" min="1" step="1" name="obj_qty_' + obj.id + '" '
+                + '         class="form-control form-control-sm obj-qty-input" '
+                + '         data-obj-id="' + obj.id + '" '
+                + '         data-unit-price="' + (unitPrice !== null ? unitPrice : '') + '" '
+                + '         placeholder="' + (obj.remaining_quantity ? 'Restam ' + obj.remaining_quantity : 'Qtd') + '">'
+                + '</td>'
+                + '<td>'
+                + '  <div class="input-group input-group-sm">'
+                + '    <span class="input-group-text">R$</span>'
+                + '    <input type="number" min="0" step="0.01" name="obj_amount_' + obj.id + '" '
+                + '           id="objAmount_' + obj.id + '" '
+                + '           class="form-control obj-amount-input fw-bold text-success" '
+                + '           data-obj-id="' + obj.id + '" '
+                + '           data-remaining="' + remAmount.toFixed(2) + '" '
+                + '           placeholder="0,00">'
+                + '    <button type="button" class="btn btn-outline-secondary btn-fill-remaining" '
+                + '            data-obj-id="' + obj.id + '" '
+                + '            data-remaining="' + remAmount.toFixed(2) + '" '
+                + '            data-rem-qty="' + (obj.remaining_quantity || '') + '" '
+                + '            title="Preencher com o saldo restante integral">'
+                + '      Saldo'
+                + '    </button>'
+                + '  </div>'
+                + '</td>'
+                + '<td class="text-center">'
+                + '  <div class="form-check form-switch d-inline-flex align-items-center gap-1 m-0">'
+                + '    <input class="form-check-input obj-settled-switch" type="checkbox" role="switch" '
+                + '           name="obj_settled_' + obj.id + '" id="objSettled_' + obj.id + '" value="1" data-obj-id="' + obj.id + '">'
+                + '    <label class="form-check-label badge bg-secondary obj-settled-badge" for="objSettled_' + obj.id + '" id="objSettledBadge_' + obj.id + '">'
+                + '      Em Aberto'
+                + '    </label>'
+                + '  </div>'
+                + '</td>'
+                + '<td>'
+                + '  <input type="text" name="obj_notes_' + obj.id + '" class="form-control form-control-sm" placeholder="Observações deste pagamento...">'
+                + '</td>';
+
+            tbodyEl.appendChild(tr);
+        });
+
+        bindObjectiveRowEvents();
+        updateTotalsSummary();
+    }
+
+    function updateSettledBadgeVisual(objId) {
+        const chk = document.getElementById('objSettled_' + objId);
+        const badge = document.getElementById('objSettledBadge_' + objId);
+        if (!chk || !badge) return;
+        if (chk.checked) {
+            badge.className = 'form-check-label badge bg-success obj-settled-badge';
+            badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Liquidado';
+        } else {
+            const amtInput = document.getElementById('objAmount_' + objId);
+            const val = amtInput ? parseFloat(amtInput.value || '0') : 0;
+            if (val > 0) {
+                badge.className = 'form-check-label badge bg-info text-dark obj-settled-badge';
+                badge.textContent = 'Parcial';
+            } else {
+                badge.className = 'form-check-label badge bg-secondary obj-settled-badge';
+                badge.textContent = 'Em Aberto';
+            }
+        }
+    }
+
+    function bindObjectiveRowEvents() {
+        // Quando digita quantidade fracionada/parcial, calcula valor sugerido se houver valor unitário
+        tbodyEl.querySelectorAll('.obj-qty-input').forEach(function (qtyInput) {
+            qtyInput.addEventListener('input', function () {
+                const objId = this.getAttribute('data-obj-id');
+                const unitPriceStr = this.getAttribute('data-unit-price');
+                const qty = parseInt(this.value || '0', 10);
+                const amtInput = document.getElementById('objAmount_' + objId);
+                if (qty > 0 && unitPriceStr && amtInput) {
+                    const calcVal = qty * parseFloat(unitPriceStr);
+                    amtInput.value = calcVal.toFixed(2);
+                    amtInput.dispatchEvent(new Event('input'));
+                }
+            });
+        });
+
+        // Quando digita valor pago (fracionado ou total)
+        tbodyEl.querySelectorAll('.obj-amount-input').forEach(function (amtInput) {
+            amtInput.addEventListener('input', function () {
+                const objId = this.getAttribute('data-obj-id');
+                const rem = parseFloat(this.getAttribute('data-remaining') || '0');
+                const val = parseFloat(this.value || '0');
+                const chk = document.getElementById('objSettled_' + objId);
+                if (chk) {
+                    chk.checked = (val >= rem && rem > 0);
+                }
+                updateSettledBadgeVisual(objId);
+                updateTotalsSummary();
+            });
+        });
+
+        // Botão "Saldo" para preencher o saldo restante com 1 clique
+        tbodyEl.querySelectorAll('.btn-fill-remaining').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const objId = this.getAttribute('data-obj-id');
+                const rem = this.getAttribute('data-remaining');
+                const remQty = this.getAttribute('data-rem-qty');
+                const amtInput = document.getElementById('objAmount_' + objId);
+                const qtyInput = tbodyEl.querySelector('.obj-qty-input[data-obj-id="' + objId + '"]');
+                if (remQty && qtyInput) {
+                    qtyInput.value = remQty;
+                }
+                if (amtInput) {
+                    amtInput.value = rem;
+                    amtInput.dispatchEvent(new Event('input'));
+                }
+            });
+        });
+
+        // Quando alterna manualmente a tag Liquidado
+        tbodyEl.querySelectorAll('.obj-settled-switch').forEach(function (chk) {
+            chk.addEventListener('change', function () {
+                const objId = this.getAttribute('data-obj-id');
+                updateSettledBadgeVisual(objId);
+            });
+        });
+    }
+
+    function updateTotalsSummary() {
+        const receiptVal = parseFloat(inputReceiptAmount.value || '0') || 0;
+        let allocated = 0;
+        tbodyEl.querySelectorAll('.obj-amount-input').forEach(function (inp) {
+            const v = parseFloat(inp.value || '0');
+            if (!isNaN(v) && v > 0) {
+                allocated += v;
+            }
+        });
+        const diff = receiptVal - allocated;
+
+        summaryReceiptVal.textContent = formatBRL(receiptVal);
+        summaryAllocatedVal.textContent = formatBRL(allocated);
+        summaryDiffVal.textContent = formatBRL(diff);
+
+        if (Math.abs(diff) < 0.009 && receiptVal > 0) {
+            summaryDiffVal.className = 'text-success fw-bold';
+        } else if (diff < 0) {
+            summaryDiffVal.className = 'text-danger fw-bold';
+        } else {
+            summaryDiffVal.className = 'text-warning fw-bold';
+        }
+    }
+
+    inputReceiptAmount.addEventListener('input', updateTotalsSummary);
+
+    if (btnUseSelectedPersonName) {
+        btnUseSelectedPersonName.addEventListener('click', function () {
+            const cellId = selectCell.value;
+            const personId = selectPerson.value;
+            if (!cellId || !personId) return;
+            const list = peopleByCell[String(cellId)] || [];
+            const found = list.find(function (p) { return String(p.id) === String(personId); });
+            if (found) {
+                inputPayerName.value = found.name;
+            }
+        });
+    }
+
+    // =========================================================================
+    // LEITURA AUTOMÁTICA DO COMPROVANTE (PDF, IMAGEM E TXT)
+    // =========================================================================
+    async function extractTextFromPdfClient(file) {
+        try {
+            if (!window.pdfjsLib) return '';
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const strings = content.items.map(function (item) { return item.str; });
+                fullText += strings.join('\n') + '\n';
+            }
+            return fullText.trim();
+        } catch (err) {
+            return '';
+        }
+    }
+
+    async function extractTextFromImageClient(file) {
+        try {
+            if (!window.Tesseract) return '';
+            const res = await window.Tesseract.recognize(file, 'por');
+            return (res && res.data && res.data.text) ? res.data.text.trim() : '';
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function applyParsedReceiptFields(data) {
+        const capturedLabels = [];
+        const missingLabels = [];
+
+        if (data.payment_date) {
+            inputDate.value = data.payment_date;
+            capturedLabels.push('Dia do pagamento');
+        } else {
+            missingLabels.push('Dia do pagamento');
+        }
+
+        if (data.payment_time) {
+            inputTime.value = data.payment_time;
+            capturedLabels.push('Hora do pagamento');
+        } else {
+            missingLabels.push('Hora do pagamento');
+        }
+
+        if (data.payer_name) {
+            inputPayerName.value = data.payer_name;
+            capturedLabels.push('Nome do responsável');
+        } else {
+            missingLabels.push('Nome do responsável');
+        }
+
+        if (data.payer_account) {
+            inputPayerAccount.value = data.payer_account;
+            capturedLabels.push('Conta');
+        } else {
+            missingLabels.push('Conta');
+        }
+
+        if (data.amount) {
+            inputReceiptAmount.value = data.amount;
+            capturedLabels.push('Valor (R$ ' + data.amount.replace('.', ',') + ')');
+            updateTotalsSummary();
+        } else {
+            missingLabels.push('Valor');
+        }
+
+        receiptAlert.classList.remove('d-none', 'alert-success', 'alert-warning');
+        if (missingLabels.length === 0) {
+            receiptStatusBadge.innerHTML = '<span class="badge bg-success"><i class="bi bi-magic me-1"></i>Comprovante lido automaticamente</span>';
+            receiptAlert.classList.add('alert-success');
+            receiptAlert.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i><strong>Dados capturados com sucesso do comprovante:</strong> ' + capturedLabels.join(', ') + '. Confira os valores abaixo.';
+        } else if (capturedLabels.length > 0) {
+            receiptStatusBadge.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Leitura parcial do comprovante</span>';
+            receiptAlert.classList.add('alert-warning');
+            receiptAlert.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Capturado automaticamente:</strong> ' + capturedLabels.join(', ') + '.<br><strong>Preencha manualmente os campos restantes:</strong> ' + missingLabels.join(', ') + '.';
+        } else {
+            receiptStatusBadge.innerHTML = '<span class="badge bg-secondary"><i class="bi bi-pencil-square me-1"></i>Preenchimento manual necessário</span>';
+            receiptAlert.classList.add('alert-warning');
+            receiptAlert.innerHTML = '<i class="bi bi-info-circle-fill me-1"></i>Não foi possível capturar os dados automaticamente deste comprovante. Por favor, preencha manualmente o <strong>Dia/Hora, Nome do Responsável, Conta e Valor</strong> abaixo.';
+        }
+    }
+
+    if (receiptInput) {
+        receiptInput.addEventListener('change', async function () {
+            const file = this.files && this.files[0];
+            if (!file) return;
+
+            receiptStatusBadge.innerHTML = '<span class="badge bg-info text-dark"><span class="spinner-border spinner-border-sm me-1"></span>Lendo comprovante...</span>';
+            receiptAlert.classList.add('d-none');
+
+            const fname = file.name.toLowerCase();
+            let clientText = '';
+
+            // 1ª tentativa: envia o arquivo ao backend
+            const fd = new FormData();
+            fd.append('receipt_file', file);
+
+            try {
+                let resp = await fetch(parseUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: fd,
+                });
+                let data = await resp.json();
+
+                // Se for PDF ou Imagem e o backend não capturou todos os campos, usa PDF.js / Tesseract.js no navegador
+                if (!data.captured_all) {
+                    if (fname.endsWith('.pdf')) {
+                        clientText = await extractTextFromPdfClient(file);
+                    } else if (fname.endsWith('.png') || fname.endsWith('.jpg') || fname.endsWith('.jpeg') || fname.endsWith('.webp') || fname.endsWith('.bmp')) {
+                        receiptStatusBadge.innerHTML = '<span class="badge bg-info text-dark"><span class="spinner-border spinner-border-sm me-1"></span>Executando OCR na imagem do comprovante...</span>';
+                        clientText = await extractTextFromImageClient(file);
+                    }
+
+                    if (clientText) {
+                        const fd2 = new FormData();
+                        fd2.append('receipt_file', file);
+                        fd2.append('extracted_text', clientText);
+                        resp = await fetch(parseUrl, {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': csrfToken },
+                            body: fd2,
+                        });
+                        data = await resp.json();
+                    }
+                }
+
+                applyParsedReceiptFields(data);
+            } catch (err) {
+                receiptStatusBadge.innerHTML = '<span class="badge bg-warning text-dark">Preencha os dados manualmente</span>';
+            }
+        });
+    }
+
+    // Eventos de troca de Célula e Pessoa
+    selectCell.addEventListener('change', function () {
+        populatePeopleForCell(this.value, '');
+    });
+
+    selectPerson.addEventListener('change', function () {
+        updatePersonHelperText();
+        renderOpenObjectivesTable();
+    });
+
+    // Inicializa com o estado atual
+    populatePeopleForCell(selectCell.value, initialPersonId);
+});
+</script>
+{% endblock %}

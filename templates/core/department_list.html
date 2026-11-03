@@ -1,0 +1,339 @@
+{% extends 'base.html' %}
+
+{% block title %}Departamentos e Instâncias | OCI Finance{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cascade-row {
+        transition: background-color 0.15s ease;
+    }
+    .cascade-row:hover {
+        background-color: rgba(33, 37, 41, 0.03);
+    }
+    .cascade-node {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    .cascade-connector {
+        display: inline-flex;
+        align-items: center;
+        color: #adb5bd;
+        margin-right: 0.4rem;
+        font-family: monospace;
+    }
+    .level-badge-d1 { background-color: #212529; color: #fff; }
+    .level-badge-d2 { background-color: #dc3545; color: #fff; }
+    .level-badge-d3 { background-color: #0d6efd; color: #fff; }
+    .level-badge-d4 { background-color: #198754; color: #fff; }
+    .level-badge-d5 { background-color: #6c757d; color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho da Página -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div>
+        <h2 class="h4 fw-bold mb-1">
+            <i class="bi bi-diagram-3-fill text-danger me-2"></i>Estrutura de Departamentos (Instâncias)
+        </h2>
+        <p class="text-muted small mb-0">
+            Exibindo <strong>{{ total_accessible }}</strong> instância{{ total_accessible|pluralize:"s" }} liberada{{ total_accessible|pluralize:"s" }} para o seu perfil.
+        </p>
+    </div>
+    <div class="d-flex gap-2 mt-2 mt-sm-0">
+        {% if show_inactive %}
+            <a href="{% url 'department_list' %}" class="btn btn-sm btn-outline-dark">
+                <i class="bi bi-eye me-1"></i> Ocultar Inativas
+            </a>
+        {% else %}
+            <a href="{% url 'department_list' %}?ocultos=1" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-eye-slash me-1"></i> Ver Instâncias Ocultas
+            </a>
+        {% endif %}
+        {% if editing_dept and can_add_dept %}
+            <a href="{% url 'department_list' %}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-plus-lg me-1"></i> Novo Cadastro Limpo
+            </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Coluna Central/Principal: Árvore em Cascata dos Departamentos Acessíveis -->
+    <div class="col-12 {% if form %}col-xl-8{% endif %}">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-list-nested text-danger me-2"></i>Hierarquia em Cascata (Nível Superior → Subordinados)
+                    </h6>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="input-group input-group-sm" style="max-width: 240px;">
+                        <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                        <input type="text" id="filterCascadeInput" class="form-control" placeholder="Filtrar sigla ou nome...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Legenda de Níveis -->
+            <div class="bg-light px-3 py-2 border-bottom small d-flex flex-wrap align-items-center gap-2">
+                <span class="text-muted fw-semibold me-1">Níveis:</span>
+                <span class="badge level-badge-d1">d1 • Administração</span>
+                <span class="badge level-badge-d2">d2 • Comitê Central (CC)</span>
+                <span class="badge level-badge-d3">d3 • Comitê Regional (CR)</span>
+                <span class="badge level-badge-d4">d4 • Setor</span>
+                <span class="badge level-badge-d5">d5 • Célula</span>
+                <span class="ms-auto text-muted">
+                    <i class="bi bi-shield-check text-success me-1"></i> Acesso Total &nbsp;|&nbsp;
+                    <i class="bi bi-eye text-secondary me-1"></i> Apenas Visualização
+                </span>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table align-middle mb-0" id="cascadeTable">
+                    <thead class="table-light small">
+                        <tr>
+                            <th>Estrutura / Instância (Cascata)</th>
+                            <th>Seu Nível de Acesso</th>
+                            <th>Instância Superior</th>
+                            <th class="text-center">Subordinadas</th>
+                            <th class="text-center">Pessoas</th>
+                            {% if can_add_dept or can_change_dept or can_delete_dept %}
+                            <th class="text-end" style="width: 170px;">Ações</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in cascade_items %}
+                        <tr class="cascade-row {% if not item.department.is_active %}table-secondary text-muted{% elif editing_dept and editing_dept.id == item.department.id %}table-warning{% endif %}"
+                            data-search="{{ item.department.code|lower }} {{ item.department.name|lower }} {{ item.path_display|lower }}">
+                            <td>
+                                <div class="cascade-node" data-indent="{{ item.indent_px }}">
+                                    {% if item.relative_depth > 0 %}
+                                        <span class="cascade-connector">
+                                            <i class="bi bi-arrow-return-right"></i>
+                                        </span>
+                                    {% else %}
+                                        <span class="me-2 text-dark">
+                                            <i class="bi bi-folder2-open"></i>
+                                        </span>
+                                    {% endif %}
+
+                                    <div>
+                                        <div class="d-flex align-items-center flex-wrap gap-1">
+                                            <span class="badge level-badge-{{ item.level_tag }}">{{ item.level_tag }}</span>
+                                            <span class="fw-bold text-dark">{{ item.department.code }}</span>
+                                            <span class="text-secondary">{{ item.department.name }}</span>
+                                            {% if not item.department.is_active %}
+                                                <span class="badge bg-secondary">Oculta</span>
+                                            {% endif %}
+                                            {% if item.is_direct %}
+                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1" title="Você está diretamente vinculado a esta instância">
+                                                    <i class="bi bi-pin-angle-fill"></i> Vínculo Direto
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="text-muted" style="font-size: 0.72rem;">
+                                            Caminho: {{ item.path_display }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="small">
+                                {% if item.can_manage %}
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                                        <i class="bi bi-shield-check me-1"></i>Acesso Total
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-light text-secondary border">
+                                        <i class="bi bi-eye me-1"></i>Visualização
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="small">
+                                {% if item.department.parent %}
+                                    <span class="badge bg-light text-dark border">
+                                        {{ item.department.parent.code }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted fst-italic">Raiz (Topo)</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center small">
+                                {% if item.department.children_count > 0 %}
+                                    <span class="badge rounded-pill bg-secondary bg-opacity-10 text-dark border">
+                                        {{ item.department.children_count }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center small">
+                                <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary">
+                                    {{ item.department.people_count }}
+                                </span>
+                            </td>
+                            {% if can_add_dept or can_change_dept or can_delete_dept %}
+                            <td class="text-end">
+                                {% if item.can_manage %}
+                                    <div class="d-inline-flex align-items-center justify-content-end gap-1">
+                                        {% if can_add_dept and item.department.is_active %}
+                                        <!-- Adicionar Filha direta desta instância -->
+                                        <a href="{% url 'department_list' %}?parent={{ item.department.id }}#formCard"
+                                           class="btn btn-sm btn-outline-success d-inline-flex align-items-center justify-content-center"
+                                           style="width: 32px; height: 32px;"
+                                           title="Adicionar sub-instância filha abaixo de {{ item.department.code }}">
+                                            <i class="bi bi-node-plus"></i>
+                                        </a>
+                                        {% endif %}
+
+                                        {% if can_change_dept %}
+                                        <!-- Editar / Alterar instância -->
+                                        <a href="{% url 'department_list' %}?edit={{ item.department.id }}#formCard"
+                                           class="btn btn-sm btn-outline-primary d-inline-flex align-items-center justify-content-center"
+                                           style="width: 32px; height: 32px;"
+                                           title="Editar ou alterar nível de {{ item.department.code }}">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </a>
+                                        {% endif %}
+
+                                        {% if can_delete_dept or can_change_dept %}
+                                        <!-- Ocultar / Reativar instância (Sem exclusão física) -->
+                                        <form method="post" action="{% url 'department_delete' item.department.id %}" class="d-inline m-0">
+                                            {% csrf_token %}
+                                            {% if item.department.is_active %}
+                                                <button type="submit"
+                                                        class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center justify-content-center"
+                                                        style="width: 32px; height: 32px;"
+                                                        title="Ocultar {{ item.department.code }} (nada é excluído)">
+                                                    <i class="bi bi-eye-slash"></i>
+                                                </button>
+                                            {% else %}
+                                                <button type="submit"
+                                                        class="btn btn-sm btn-outline-success d-inline-flex align-items-center justify-content-center"
+                                                        style="width: 32px; height: 32px;"
+                                                        title="Reativar {{ item.department.code }}">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                            {% endif %}
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                {% else %}
+                                    <span class="badge bg-light text-muted border" title="Você possui apenas permissão de visualização neste nível">
+                                        <i class="bi bi-lock"></i> Somente Leitura
+                                    </span>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="{% if can_add_dept or can_change_dept or can_delete_dept %}6{% else %}5{% endif %}" class="text-center text-muted py-5">
+                                <i class="bi bi-diagram-3 fs-2 d-block mb-2 text-secondary"></i>
+                                Nenhuma instância encontrada no seu escopo de acesso.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% if form %}
+    <!-- Coluna Lateral Direita: Formulário de Cadastro / Edição / Realocação -->
+    <div class="col-12 col-xl-4" id="formCard">
+        <div class="card border-0 shadow-sm sticky-top" style="top: 1.5rem;">
+            <div class="card-header {% if editing_dept %}bg-primary text-white{% else %}bg-dark text-white{% endif %} py-3">
+                <h6 class="m-0 fw-bold d-flex align-items-center">
+                    {% if editing_dept %}
+                        <i class="bi bi-pencil-square me-2"></i>
+                        Editar / Alterar Instância: {{ editing_dept.code }}
+                    {% else %}
+                        <i class="bi bi-plus-circle-fill text-danger me-2"></i>
+                        Cadastrar Nova Instância
+                    {% endif %}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="post"
+                      action="{% if editing_dept %}{% url 'department_update' editing_dept.id %}{% else %}{% url 'department_create' %}{% endif %}">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="{{ form.code.id_for_label }}" class="form-label small fw-bold">
+                            Código / Sigla <span class="text-danger">*</span>
+                        </label>
+                        {{ form.code }}
+                        <div class="form-text small">
+                            Sigla única de identificação (ex.: <code>CC</code>, <code>CR-01</code>, <code>SETOR-A</code>, <code>CEL-01</code>).
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label small fw-bold">
+                            Nome da Instância <span class="text-danger">*</span>
+                        </label>
+                        {{ form.name }}
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.parent.id_for_label }}" class="form-label small fw-bold">
+                            Instância Superior (Nível Acima) {% if not user.is_superuser %}<span class="text-danger">*</span>{% endif %}
+                        </label>
+                        {{ form.parent }}
+                        <div class="form-text small">
+                            Apenas instâncias onde você possui <strong>Acesso Total</strong> podem ser escolhidas como nível superior.
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn {% if editing_dept %}btn-primary{% else %}btn-danger{% endif %} fw-semibold">
+                            <i class="bi bi-check2-circle me-1"></i>
+                            {% if editing_dept %}Salvar Alterações{% else %}Cadastrar Instância{% endif %}
+                        </button>
+                        {% if editing_dept %}
+                            <a href="{% url 'department_list' %}" class="btn btn-outline-secondary btn-sm">
+                                Cancelar Edição
+                            </a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light small text-muted">
+                <div class="fw-semibold text-dark mb-1">
+                    <i class="bi bi-shield-check text-success me-1"></i> Visualização vs. Acesso Total:
+                </div>
+                Se você estiver em uma instância <code>d3</code> com <strong>Apenas Visualização</strong> e em <code>d4</code> com <strong>Acesso Total</strong>, você verá toda a árvore a partir de <code>d3</code>, mas só poderá criar/editar/ocultar de <code>d4</code> para baixo.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.cascade-node').forEach(function (el) {
+            const indent = el.getAttribute('data-indent') || '0';
+            el.style.paddingLeft = indent + 'px';
+        });
+
+        const filterInput = document.getElementById('filterCascadeInput');
+        if (filterInput) {
+            filterInput.addEventListener('input', function () {
+                const term = this.value.toLowerCase().trim();
+                const rows = document.querySelectorAll('#cascadeTable tbody tr.cascade-row');
+                rows.forEach(function (row) {
+                    const text = row.getAttribute('data-search') || '';
+                    row.style.display = text.includes(term) ? '' : 'none';
+                });
+            });
+        }
+    });
+</script>
+{% endblock %}
